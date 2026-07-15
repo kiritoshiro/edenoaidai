@@ -40,17 +40,6 @@
                 <span>Autorystė (copyright)</span>
                 <input v-model="song.copyright" class="adm-input" />
             </label>
-            <label class="adm-field" style="max-width: 200px">
-                <span>Natų puslapių skaičius</span>
-                <input
-                    v-model.number="song.pages"
-                    class="adm-input"
-                    type="number"
-                    min="1"
-                    max="9"
-                />
-            </label>
-
             <div class="adm-field">
                 <span>Įrašų tipai (audio)</span>
                 <p class="adm-file-note">
@@ -127,9 +116,8 @@
 
             <h2>Natos</h2>
             <p class="adm-file-note">
-                Puslapių skaičius nustatomas lauke „Natų puslapių skaičius“
-                (išsaugokite giesmę, kad pasikeistų sąrašas). „Natos 1#“ –
-                SVG failai, „Natos 2#“ – JPG failai.
+                Puslapiai aptinkami automatiškai pagal SVG ir JPG failus.
+                Tuščia eilutė po paskutinio failo skirta kitam puslapiui įkelti.
             </p>
             <table v-for="format in ['svg', 'jpg']" :key="format" class="adm-table" style="margin-bottom: 20px">
                 <thead>
@@ -239,7 +227,6 @@ export default {
                     verse: '',
                     body: '',
                     copyright: '',
-                    pages: 3,
                     lists: [],
                 };
             } else {
@@ -268,7 +255,6 @@ export default {
                 verse: song.verse || '',
                 body: brToNewlines(song.body),
                 copyright: song.copyright || '',
-                pages: Number(song.pages) || 3,
                 lists: Array.isArray(song.lists) ? [...song.lists] : [],
             };
         },

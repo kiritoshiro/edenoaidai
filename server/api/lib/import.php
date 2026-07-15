@@ -70,27 +70,24 @@ function import_songs(PDO $db, array $rows): int
     $db->beginTransaction();
     try {
         $upsert = $db->prepare(
-            'INSERT INTO songs (song_id, title, verse, body, copyright, pages)
-             VALUES (:song_id, :title, :verse, :body, :copyright, :pages)
+            'INSERT INTO songs (song_id, title, verse, body, copyright)
+             VALUES (:song_id, :title, :verse, :body, :copyright)
              ON DUPLICATE KEY UPDATE
                  title = :u_title, verse = :u_verse, body = :u_body,
-                 copyright = :u_copyright, pages = :u_pages',
+                 copyright = :u_copyright',
         );
         $ids = [];
         foreach ($rows as $row) {
-            $pages = $row['pages'] ?? null;
             $upsert->execute([
                 ':song_id' => $row['song_id'],
                 ':title' => $row['title'],
                 ':verse' => $row['verse'],
                 ':body' => $row['body'],
                 ':copyright' => $row['copyright'],
-                ':pages' => $pages,
                 ':u_title' => $row['title'],
                 ':u_verse' => $row['verse'],
                 ':u_body' => $row['body'],
                 ':u_copyright' => $row['copyright'],
-                ':u_pages' => $pages,
             ]);
             $ids[] = $row['song_id'];
         }

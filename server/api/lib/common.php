@@ -127,6 +127,56 @@ function notes_file_name(string $songId, int $page, string $format): string
     return $page === 0 ? "$songId.$format" : "{$songId}_{$page}.$format";
 }
 
+function note_pages_for_format(string $songId, string $format): array
+{
+    $pages = [];
+    for ($page = 0; $page <= 8; $page++) {
+        $file = notes_file_name($songId, $page, $format);
+        if (is_file(files_dir() . "/notes/$format/$file")) {
+            $pages[] = $page;
+        }
+    }
+    return $pages;
+}
+
+function note_pages_for_song(string $songId): array
+{
+    $result = [];
+    foreach (FORMATS as $format) {
+        $result[$format] = note_pages_for_format($songId, $format);
+    }
+    return $result;
+}
+
+function detected_note_page_count(array $notePages): int
+{
+    $highest = -1;
+    foreach ($notePages as $pages) {
+        if ($pages) {
+            $highest = max($highest, max($pages));
+        }
+    }
+    return $highest + 1;
+}
+
+function admin_note_file_entries(string $songId, string $format): array
+{
+    $existingPages = note_pages_for_format($songId, $format);
+    $existing = array_flip($existingPages);
+    $lastPage = $existingPages ? min(8, max($existingPages) + 1) : 0;
+    $entries = [];
+
+    // Include existing pages, gaps, and one empty slot for the next upload.
+    for ($page = 0; $page <= $lastPage; $page++) {
+        $entries[] = [
+            'page' => $page,
+            'file' => notes_file_name($songId, $page, $format),
+            'exists' => isset($existing[$page]),
+        ];
+    }
+    return $entries;
+}
+
 // ─── Sesija / prisijungimas ──────────────────────────────────────────
 
 function start_session(): void
@@ -218,15 +268,19 @@ function clear_login_failures(string $ip): void
 
 function song_to_api(array $row, ?array $lists = null): array
 {
+    $notePages = note_pages_for_song((string) $row['song_id']);
     $song = [
         'songId' => $row['song_id'],
         'title' => $row['title'],
         'verse' => $row['verse'] ?? '',
         'body' => $row['body'] ?? '',
         'copyright' => $row['copyright'] ?? '',
+        'notePages' => $notePages,
     ];
-    if (!empty($row['pages'])) {
-        $song['pages'] = (int) $row['pages'];
+    $pageCount = detected_note_page_count($notePages);
+    if ($pageCount > 0) {
+        // Compatibility for older installed clients; new clients use notePages.
+        $song['pages'] = $pageCount;
     }
     if ($lists !== null) {
         $song['lists'] = $lists;
@@ -252,12 +306,6 @@ function sanitize_song(array $input): array
     foreach (['verse', 'body', 'copyright'] as $field) {
         if (isset($input[$field]) && is_string($input[$field])) {
             $song[$field] = $input[$field];
-        }
-    }
-    if (isset($input['pages'])) {
-        $pages = filter_var($input['pages'], FILTER_VALIDATE_INT);
-        if ($pages !== false && $pages >= 1 && $pages <= 9) {
-            $song['pages'] = $pages;
         }
     }
     return $song;

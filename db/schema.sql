@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS songs (
     verse TEXT NULL,
     body MEDIUMTEXT NULL,
     copyright TEXT NULL,
-    pages TINYINT UNSIGNED NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uq_song_id (song_id)
@@ -45,6 +44,6 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 -- Kategorijos ikona: server/files/audio/<kategorija>/icon.svg (arba png/webp/jpg).
 
 -- Pavyzdinės giesmės (pakeiskite importuodami tikrą db.json)
-INSERT IGNORE INTO songs (song_id, title, verse, body, copyright, pages) VALUES
-    ('1', 'PAVYZDYS – įkelkite tikrą duomenų bazę', '', 'Tai pavyzdinis įrašas.<br>Administravime (Duomenų bazė) įkelkite tikrą db.json failą.', '', 1),
-    ('2', 'PAVYZDYS – antra giesmė', '', 'Antras pavyzdinis įrašas.', '', 1);
+INSERT IGNORE INTO songs (song_id, title, verse, body, copyright) VALUES
+    ('1', 'PAVYZDYS – įkelkite tikrą duomenų bazę', '', 'Tai pavyzdinis įrašas.<br>Administravime (Duomenų bazė) įkelkite tikrą db.json failą.', ''),
+    ('2', 'PAVYZDYS – antra giesmė', '', 'Antras pavyzdinis įrašas.', '');

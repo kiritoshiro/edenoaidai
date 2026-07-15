@@ -135,17 +135,23 @@ export default {
         fontSizeStyle() {
             return { fontSize: `${this.fontSize}px` };
         },
-        // Number of sheet music pages (editable per song in the admin)
-        pageCount() {
-            return (this.song && Number(this.song.pages)) || 3;
+        notePageIndexes() {
+            const detected = this.song?.notePages?.[this.imageType];
+            if (Array.isArray(detected)) {
+                return detected;
+            }
+
+            // Compatibility with data cached by older installed versions.
+            const legacyCount = (this.song && Number(this.song.pages)) || 0;
+            return Array.from({ length: legacyCount }, (_, index) => index);
         },
         imageUrls() {
             if (!this.song) return [];
             const base = `${config.notesBase}/${this.imageType}/${this.song.songId}`;
-            return Array.from({ length: this.pageCount }, (_, index) =>
-                index === 0
+            return this.notePageIndexes.map(page =>
+                page === 0
                     ? `${base}.${this.imageType}`
-                    : `${base}_${index}.${this.imageType}`,
+                    : `${base}_${page}.${this.imageType}`,
             );
         },
         currentIndex() {

@@ -9,6 +9,8 @@
   `icon.jpg`, or `icon.jpeg` in the category folder.
 - Song IDs containing spaces, such as `27 A`, are supported.
 - The index can be refreshed manually with `php server/api/sync-audio.php`.
+- Sheet-music page lists are detected from the SVG/JPG files. The manual page
+  count field has been removed from the song editor.
 
 ## What is no longer required
 

@@ -167,15 +167,14 @@ if ($first === 'songs') {
         }
         try {
             $db->prepare(
-                'INSERT INTO songs (song_id, title, verse, body, copyright, pages)
-                 VALUES (?, ?, ?, ?, ?, ?)',
+                'INSERT INTO songs (song_id, title, verse, body, copyright)
+                 VALUES (?, ?, ?, ?, ?)',
             )->execute([
                 $song['song_id'],
                 $song['title'],
                 $song['verse'] ?? '',
                 $song['body'] ?? '',
                 $song['copyright'] ?? '',
-                $song['pages'] ?? null,
             ]);
         } catch (PDOException $e) {
             if ((int) $e->errorInfo[1] === 1062) {
@@ -189,7 +188,6 @@ if ($first === 'songs') {
             'verse' => $song['verse'] ?? '',
             'body' => $song['body'] ?? '',
             'copyright' => $song['copyright'] ?? '',
-            'pages' => $song['pages'] ?? null,
         ]), 201);
     }
 
@@ -244,8 +242,6 @@ if ($first === 'songs') {
             if (!$row) {
                 fail(404, 'Giesmė nerasta');
             }
-            $pages = !empty($row['pages']) ? (int) $row['pages'] : 3;
-
             $audio = [];
             foreach (fetch_track_types($db) as $type) {
                 $audio[$type['name']] = is_file(files_dir() . "/audio/{$type['name']}/$songId.mp3");
@@ -253,18 +249,16 @@ if ($first === 'songs') {
 
             $notes = [];
             foreach (FORMATS as $format) {
-                $notes[$format] = [];
-                for ($page = 0; $page < $pages; $page++) {
-                    $file = notes_file_name($songId, $page, $format);
-                    $notes[$format][] = [
-                        'page' => $page,
-                        'file' => $file,
-                        'exists' => is_file(files_dir() . "/notes/$format/$file"),
-                    ];
-                }
+                $notes[$format] = admin_note_file_entries($songId, $format);
             }
 
-            json_out(['pages' => $pages, 'audio' => $audio, 'notes' => $notes]);
+            $notePages = note_pages_for_song($songId);
+            json_out([
+                'pages' => detected_note_page_count($notePages),
+                'notePages' => $notePages,
+                'audio' => $audio,
+                'notes' => $notes,
+            ]);
         }
     }
 }
