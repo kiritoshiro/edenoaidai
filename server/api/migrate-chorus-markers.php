@@ -72,11 +72,16 @@ function legacy_lyrics_blocks(string $body): array
 function slides_to_legacy_body(array $slides): string
 {
     return implode('<br><br>', array_map(
-        static fn (array $slide): string => str_replace(
-            "\n",
-            '<br>',
-            htmlspecialchars($slide['text'], ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8'),
-        ),
+        static function (array $slide): string {
+            $lyrics = str_replace(
+                "\n",
+                '<br>',
+                htmlspecialchars($slide['text'], ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8'),
+            );
+            return $slide['isChorus']
+                ? '<span class="priegiesmis">Priegiesmis:</span><br>' . $lyrics
+                : $lyrics;
+        },
         $slides,
     ));
 }
@@ -228,4 +233,3 @@ try {
 
 echo "\nMigration completed.\n";
 echo "Backup: $backup\n";
-

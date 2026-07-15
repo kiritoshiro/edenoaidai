@@ -163,7 +163,6 @@
 
             <header class="lyrics-show__header">
                 <span>{{ song.songId }} {{ song.title }}</span>
-                <strong v-if="currentSlide?.isChorus">Priegiesmis</strong>
             </header>
 
             <main ref="slideshowContent" class="lyrics-show__content">
@@ -249,8 +248,8 @@
                         <div>
                             <h3>Rodomi stulpeliai</h3>
                             <p>
-                                Priegiesmio skaičius nurodo, kiek kartų jis rodomas
-                                po kiekvieno pasirinkto posmo.
+                                Išjunkite bet kurį konkretų posmą arba priegiesmį
+                                galutinėje skaidrių sekoje.
                             </p>
                         </div>
                         <div class="lyrics-show__selection-actions">
@@ -265,7 +264,7 @@
 
                     <div class="lyrics-show__slide-options">
                         <label
-                            v-for="(slide, index) in sourceSlides"
+                            v-for="(slide, index) in slideshowSequence"
                             :key="index"
                             class="lyrics-show__slide-option"
                             :class="{
@@ -280,20 +279,6 @@
                                 <span>
                                     <strong>{{ slideOptionTitle(slide, index) }}</strong>
                                     <small>{{ slideOptionPreview(slide) }}</small>
-                                </span>
-                                <span
-                                    v-if="slide.isChorus"
-                                    class="lyrics-show__repeat-control"
-                                >
-                                    <input
-                                        v-model.number="slideshowOptions[index].repetitions"
-                                        type="number"
-                                        min="1"
-                                        max="10"
-                                        aria-label="Priegiesmio kartojimų skaičius"
-                                        @change="normalizeRepetitions(slideshowOptions[index])"
-                                    />
-                                    kart.
                                 </span>
                             </template>
                         </label>
@@ -339,11 +324,23 @@ function slidesFromBody(body) {
         .split(/\n\s*\n+/)
         .map(value => value.trim())
         .filter(Boolean);
-    return blocks.map(value => ({
-        text: value,
-        isChorus: false,
-        chorusAfter: false,
-    }));
+    return blocks.map(value => {
+        let isChorus = false;
+        const cleanText = value
+            .replace(
+                /(^|\n)[\t ]*priegiesmis(?:[\t ]*:[\t ]*|[\t ]*(?=\n|$))/giu,
+                (_, lineStart) => {
+                    isChorus = true;
+                    return lineStart;
+                },
+            )
+            .trim();
+        return {
+            text: cleanText,
+            isChorus,
+            chorusAfter: false,
+        };
+    });
 }
 
 export default {
@@ -440,32 +437,11 @@ export default {
                 : [];
             return saved.length > 0 ? saved : slidesFromBody(this.song.body);
         },
-        slideshowSlides() {
-            const selected = this.sourceSlides
-                .map((slide, index) => ({
-                    ...slide,
-                    option: this.slideshowOptions[index] || {
-                        enabled: true,
-                        repetitions: 1,
-                    },
-                }))
-                .filter(slide => slide.option.enabled);
-            const choruses = selected.filter(slide => slide.isChorus);
-            const verses = selected.filter(slide => !slide.isChorus);
+        slideshowSequence() {
+            const choruses = this.sourceSlides.filter(slide => slide.isChorus);
+            const verses = this.sourceSlides.filter(slide => !slide.isChorus);
 
-            const repeatedChoruses = () =>
-                choruses.flatMap(chorus =>
-                    Array.from(
-                        { length: this.repetitionCount(chorus.option) },
-                        () => ({
-                            text: chorus.text,
-                            isChorus: true,
-                            chorusAfter: false,
-                        }),
-                    ),
-                );
-
-            if (verses.length === 0) return repeatedChoruses();
+            if (verses.length === 0) return choruses;
 
             const sequence = [];
             verses.forEach(verse => {
@@ -475,10 +451,15 @@ export default {
                     chorusAfter: verse.chorusAfter,
                 });
                 if (choruses.length > 0 && verse.chorusAfter !== false) {
-                    sequence.push(...repeatedChoruses());
+                    sequence.push(...choruses);
                 }
             });
             return sequence;
+        },
+        slideshowSlides() {
+            return this.slideshowSequence.filter(
+                (_, index) => this.slideshowOptions[index]?.enabled !== false,
+            );
         },
         currentSlide() {
             return this.slideshowSlides[this.slideshowIndex] || null;
@@ -607,22 +588,15 @@ export default {
             }
         },
         prepareSlideshowOptions() {
-            if (this.slideshowOptions.length === this.sourceSlides.length) return;
-            this.slideshowOptions = this.sourceSlides.map(() => ({
+            if (this.slideshowOptions.length === this.slideshowSequence.length) return;
+            this.slideshowOptions = this.slideshowSequence.map(() => ({
                 enabled: true,
-                repetitions: 1,
             }));
         },
         setAllSlidesEnabled(enabled) {
             this.slideshowOptions.forEach(option => {
                 option.enabled = enabled;
             });
-        },
-        repetitionCount(option) {
-            return Math.min(10, Math.max(1, parseInt(option?.repetitions, 10) || 1));
-        },
-        normalizeRepetitions(option) {
-            option.repetitions = this.repetitionCount(option);
         },
         adjustSlideshowFontSize(delta) {
             const current = Math.min(
@@ -679,9 +653,10 @@ export default {
             this.fittedSlideshowFontSize = displayed;
         },
         slideOptionTitle(slide, index) {
-            return slide.isChorus
-                ? `Priegiesmis · stulpelis ${index + 1}`
-                : `Posmas · stulpelis ${index + 1}`;
+            const number = this.slideshowSequence
+                .slice(0, index + 1)
+                .filter(item => item.isChorus === slide.isChorus).length;
+            return slide.isChorus ? `Priegiesmis ${number}` : `Posmas ${number}`;
         },
         slideOptionPreview(slide) {
             const firstLine = String(slide.text || '').split(/\r?\n/, 1)[0].trim();
@@ -1121,8 +1096,7 @@ export default {
     &__font-control,
     &__theme-buttons,
     &__selection-actions,
-    &__slide-option,
-    &__repeat-control {
+    &__slide-option {
         display: flex;
         align-items: center;
     }
@@ -1263,23 +1237,6 @@ export default {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
-        }
-    }
-
-    &__repeat-control {
-        flex: 0 0 auto;
-        gap: 5px;
-        color: var(--lyrics-show-muted);
-        font-size: 13px;
-
-        input {
-            width: 52px;
-            box-sizing: border-box;
-            padding: 6px;
-            border: 1px solid var(--lyrics-show-border);
-            border-radius: 7px;
-            color: var(--lyrics-show-text);
-            background: var(--lyrics-show-control);
         }
     }
 

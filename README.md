@@ -116,12 +116,14 @@ keyboard:
 - `Esc` - close the slideshow
 
 The settings button inside fullscreen mode provides dark and light themes,
-adjustable lyric text size, and a checkbox for every lyric column. Each chorus
-also has its own repetition count (1-10), which controls how many times that
-chorus appears after each selected verse. Theme and font size are remembered by
-the browser; per-song column selections reset when another song is opened. The
-requested text size is capped separately for every slide so the complete stanza
-always stays inside the fullscreen area without scrolling or clipping.
+adjustable lyric text size, and a checkbox for every item in the final playback
+sequence (`verse, chorus, verse, chorus, ...`). Every individual occurrence can
+be hidden without affecting the other occurrences of the same chorus. Theme and
+font size are remembered by the browser; per-song column selections reset when
+another song is opened. The requested text size is capped separately for every
+slide so the complete stanza always stays inside the fullscreen area without
+scrolling or clipping. The normal song view displays the `Priegiesmis` label,
+while fullscreen slides show only the lyrics.
 
 The application automatically adds the `slides_json` column to an existing
 `songs` table. If the production database user is not allowed to alter tables,
@@ -134,8 +136,9 @@ ALTER TABLE songs ADD COLUMN slides_json MEDIUMTEXT NULL AFTER body;
 ### One-time legacy chorus migration
 
 After upgrading an existing song database, preview the migration that finds a
-standalone `Priegiesmis` label in each lyrics column, marks that column as a
-chorus, and removes the label from the displayed lyrics:
+standalone `Priegiesmis` label in each lyrics column and marks that column as a
+chorus. The label remains in the normal song view but is kept out of fullscreen
+slide text:
 
 ```bash
 cd /home/giesmynas2/public_html

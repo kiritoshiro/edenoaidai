@@ -257,6 +257,17 @@ function newlinesToBr(value) {
         .replace(/\n/g, '<br>');
 }
 
+function slidesToBody(slides) {
+    return slides
+        .map(slide => {
+            const lyrics = newlinesToBr(slide.text);
+            return slide.isChorus
+                ? `<span class="priegiesmis">Priegiesmis:</span><br>${lyrics}`
+                : lyrics;
+        })
+        .join('<br><br>');
+}
+
 let nextSlideKey = 1;
 
 function createSlide(values = {}) {
@@ -414,7 +425,7 @@ export default {
                 delete editableSong.slides;
                 const payload = {
                     ...editableSong,
-                    body: newlinesToBr(slides.map(slide => slide.text).join('\n\n')),
+                    body: slidesToBody(slides),
                     slides,
                 };
                 if (this.isNew) {
