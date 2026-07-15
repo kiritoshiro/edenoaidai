@@ -115,6 +115,12 @@ keyboard:
 - `Home` / `End` - first or last slide
 - `Esc` - close the slideshow
 
+The settings button inside fullscreen mode provides dark and light themes,
+adjustable lyric text size, and a checkbox for every lyric column. Each chorus
+also has its own repetition count (1-10), which controls how many times that
+chorus appears after each selected verse. Theme and font size are remembered by
+the browser; per-song column selections reset when another song is opened.
+
 The application automatically adds the `slides_json` column to an existing
 `songs` table. If the production database user is not allowed to alter tables,
 run this once with a privileged database account before deploying the new code:
