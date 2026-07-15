@@ -1,4 +1,4 @@
-/* Service worker (Workbox 7, bundled by vite-plugin-pwa). */
+/* Service worker (Workbox 7, bundled by scripts/build.mjs). */
 import { clientsClaim } from 'workbox-core';
 import {
     cleanupOutdatedCaches,

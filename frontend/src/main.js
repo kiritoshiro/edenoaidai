@@ -1,5 +1,4 @@
 import { createApp } from 'vue';
-import { registerSW } from 'virtual:pwa-register';
 import App from './App.vue';
 import router from './router';
 import { db } from './db';
@@ -14,5 +13,12 @@ app.config.globalProperties.$songs = db.songs;
 app.use(router);
 app.mount('#app');
 
-// New service worker (sw.js). `immediate` + autoUpdate keeps clients fresh.
-registerSW({ immediate: true });
+// Register the production service worker. It calls skipWaiting() and
+// clientsClaim(), so an updated build takes control as soon as it is installed.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(error => {
+            console.error('Service worker registration failed:', error);
+        });
+    });
+}

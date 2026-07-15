@@ -5,9 +5,9 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build",
+        "build": "node scripts/build.mjs",
         "preview": "vite preview",
-        "release": "vite build && node scripts/sync-to-server.mjs"
+        "release": "node scripts/build.mjs && node scripts/sync-to-server.mjs"
     },
     "dependencies": {
         "dexie": "^4.0.11",
@@ -18,7 +18,6 @@
         "@vitejs/plugin-vue": "^6.0.0",
         "sass-embedded": "^1.85.0",
         "vite": "^7.0.0",
-        "vite-plugin-pwa": "^1.0.0",
         "workbox-cacheable-response": "^7.3.0",
         "workbox-core": "^7.3.0",
         "workbox-expiration": "^7.3.0",
