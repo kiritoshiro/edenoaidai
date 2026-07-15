@@ -38,7 +38,7 @@
                         <h3>Teksto stulpeliai / skaidrės</h3>
                         <p class="adm-file-note">
                             Kiekvienas stulpelis skaidrių režime rodomas atskirai.
-                            Priedainio stulpeliai pagal nutylėjimą kartojami po
+                            Priegiesmio stulpeliai pagal nutylėjimą kartojami po
                             kiekvieno paprasto stulpelio.
                         </p>
                     </div>
@@ -102,11 +102,11 @@
                                 type="checkbox"
                                 @change="onSlideTypeChange(slide)"
                             />
-                            Priedainis
+                            Priegiesmis
                         </label>
                         <label v-if="!slide.isChorus && hasChorus">
                             <input v-model="slide.chorusAfter" type="checkbox" />
-                            Rodyti priedainį po šio stulpelio
+                            Rodyti priegiesmį po šio stulpelio
                         </label>
                     </div>
                 </article>
@@ -243,13 +243,12 @@
 <script>
 import { api } from '../../lib/api';
 import { config } from '../../lib/config';
+import { lyricsToPlainText } from '../../lib/lyrics';
 
 // Saugykloje eilučių lūžiai laikomi kaip <br>, o redaktoriuje rodomi
 // kaip paprastos naujos eilutės (Enter). Konvertuojama abiem kryptimis.
 function brToNewlines(value) {
-    return String(value || '')
-        .replace(/\r\n?/g, '\n')
-        .replace(/<br\s*\/?>\n?/gi, '\n');
+    return lyricsToPlainText(value);
 }
 
 function newlinesToBr(value) {
@@ -363,7 +362,7 @@ export default {
         },
         slideLabel(slide, index) {
             return slide.isChorus
-                ? `Priedainis (${index + 1})`
+                ? `Priegiesmis (${index + 1})`
                 : `Stulpelis ${index + 1}`;
         },
         flash(message) {
@@ -401,7 +400,7 @@ export default {
             try {
                 const slides = this.song.slides
                     .map(({ text, isChorus, chorusAfter }) => ({
-                        text: String(text || '').trim(),
+                        text: lyricsToPlainText(text),
                         isChorus: isChorus === true,
                         chorusAfter: isChorus === true ? false : chorusAfter !== false,
                     }))

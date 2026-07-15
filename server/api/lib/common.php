@@ -295,7 +295,15 @@ function normalize_song_slides(mixed $value): array
         if (!is_array($entry) || !is_string($entry['text'] ?? null)) {
             continue;
         }
-        $text = trim($entry['text']);
+        $text = preg_replace('/<br\s*\/?>/i', "\n", $entry['text']) ?? '';
+        $text = preg_replace(
+            '/<\/(?:article|div|h[1-6]|li|p|section)>/i',
+            "\n",
+            $text,
+        ) ?? '';
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? '';
+        $text = trim($text);
         if ($text === '') {
             continue;
         }

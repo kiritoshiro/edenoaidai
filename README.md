@@ -98,8 +98,8 @@ Database backups created before imports are stored under `server/storage/backups
 ## Lyrics columns and fullscreen slides
 
 The song editor stores lyrics as separate columns/slides. Mark a column as a
-chorus with the `Priedainis` checkbox. When a song has a chorus, it is inserted
-after every ordinary column by default. Clear `Rodyti priedainį po šio
+chorus with the `Priegiesmis` checkbox. When a song has a chorus, it is inserted
+after every ordinary column by default. Clear `Rodyti priegiesmį po šio
 stulpelio` on an individual column when the chorus must not follow it.
 
 Existing songs remain compatible. The editor converts legacy lyrics into
@@ -119,7 +119,9 @@ The settings button inside fullscreen mode provides dark and light themes,
 adjustable lyric text size, and a checkbox for every lyric column. Each chorus
 also has its own repetition count (1-10), which controls how many times that
 chorus appears after each selected verse. Theme and font size are remembered by
-the browser; per-song column selections reset when another song is opened.
+the browser; per-song column selections reset when another song is opened. The
+requested text size is capped separately for every slide so the complete stanza
+always stays inside the fullscreen area without scrolling or clipping.
 
 The application automatically adds the `slides_json` column to an existing
 `songs` table. If the production database user is not allowed to alter tables,

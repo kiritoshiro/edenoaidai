@@ -119,7 +119,7 @@
             ref="slideshow"
             class="lyrics-show"
             :class="{ 'lyrics-show--light': slideshowTheme === 'light' }"
-            :style="{ '--lyrics-font-size': `${slideshowFontSize}px` }"
+            :style="{ '--lyrics-font-size': `${fittedSlideshowFontSize}px` }"
             role="dialog"
             aria-modal="true"
             aria-label="GiesmÄ—s skaidrÄ—s"
@@ -163,10 +163,10 @@
 
             <header class="lyrics-show__header">
                 <span>{{ song.songId }} {{ song.title }}</span>
-                <strong v-if="currentSlide?.isChorus">Priedainis</strong>
+                <strong v-if="currentSlide?.isChorus">Priegiesmis</strong>
             </header>
 
-            <main class="lyrics-show__content">
+            <main ref="slideshowContent" class="lyrics-show__content">
                 <span v-if="currentSlide">{{ currentSlideText }}</span>
                 <span v-else class="lyrics-show__empty">
                     Nustatymuose pasirinkite bent vienÄ… stulpelÄ¯.
@@ -213,23 +213,35 @@
                 <section class="lyrics-show__setting-group">
                     <div class="lyrics-show__setting-title">
                         <h3>Teksto dydis</h3>
-                        <output>{{ slideshowFontSize }} px</output>
+                        <output>{{ fittedSlideshowFontSize }} px</output>
                     </div>
                     <div class="lyrics-show__font-control">
-                        <button type="button" @click="adjustSlideshowFontSize(-4)">
+                        <button
+                            type="button"
+                            :disabled="fittedSlideshowFontSize <= 8"
+                            @click="adjustSlideshowFontSize(-4)"
+                        >
                             Aâˆ’
                         </button>
                         <input
                             v-model.number="slideshowFontSize"
                             type="range"
-                            min="24"
-                            max="96"
+                            min="8"
+                            :max="Math.max(8, slideshowFontLimit)"
                             step="2"
                         />
-                        <button type="button" @click="adjustSlideshowFontSize(4)">
+                        <button
+                            type="button"
+                            :disabled="fittedSlideshowFontSize >= slideshowFontLimit"
+                            @click="adjustSlideshowFontSize(4)"
+                        >
                             A+
                         </button>
                     </div>
+                    <p>
+                        Tai didÅ¾iausias norimas dydis. Ilgesnis posmelis
+                        automatiÅ¡kai sumaÅ¾inamas, kad visas tilptÅ³ skaidrÄ—je.
+                    </p>
                 </section>
 
                 <section class="lyrics-show__setting-group">
@@ -237,7 +249,7 @@
                         <div>
                             <h3>Rodomi stulpeliai</h3>
                             <p>
-                                Priedainio skaiÄius nurodo, kiek kartÅ³ jis rodomas
+                                Priegiesmio skaiÄius nurodo, kiek kartÅ³ jis rodomas
                                 po kiekvieno pasirinkto posmo.
                             </p>
                         </div>
@@ -278,7 +290,7 @@
                                         type="number"
                                         min="1"
                                         max="10"
-                                        aria-label="Priedainio kartojimÅ³ skaiÄius"
+                                        aria-label="Priegiesmio kartojimÅ³ skaiÄius"
                                         @change="normalizeRepetitions(slideshowOptions[index])"
                                     />
                                     kart.
@@ -318,12 +330,11 @@
 
 <script>
 import { config } from '../lib/config';
+import { lyricsToPlainText } from '../lib/lyrics';
 import SongIcon from '../components/SongIcon.vue';
 
 function slidesFromBody(body) {
-    const text = String(body || '')
-        .replace(/\r\n?/g, '\n')
-        .replace(/<br\s*\/?>\n?/gi, '\n');
+    const text = lyricsToPlainText(body);
     const blocks = text
         .split(/\n\s*\n+/)
         .map(value => value.trim())
@@ -364,12 +375,14 @@ export default {
                     ? 'light'
                     : 'dark',
             slideshowFontSize: Math.min(
-                96,
+                160,
                 Math.max(
-                    24,
+                    8,
                     parseInt(localStorage.getItem('slideshowFontSize'), 10) || 56,
                 ),
             ),
+            fittedSlideshowFontSize: 56,
+            slideshowFontLimit: 160,
             slideshowOptions: [],
         };
     },
@@ -389,889 +402,4 @@ export default {
         },
         imageUrls() {
             if (!this.song) return [];
-            const base = `${config.notesBase}/${this.imageType}/${this.song.songId}`;
-            return this.notePageIndexes.map(page =>
-                page === 0
-                    ? `${base}.${this.imageType}`
-                    : `${base}_${page}.${this.imageType}`,
-            );
-        },
-        currentIndex() {
-            return this.song ? this.songIds.indexOf(this.song.songId) : -1;
-        },
-        previousSongId() {
-            return this.currentIndex > 0
-                ? this.songIds[this.currentIndex - 1]
-                : '';
-        },
-        nextSongId() {
-            return this.currentIndex >= 0 &&
-                this.currentIndex < this.songIds.length - 1
-                ? this.songIds[this.currentIndex + 1]
-                : '';
-        },
-        sourceSlides() {
-            if (!this.song) return [];
-            const saved = Array.isArray(this.song.slides)
-                ? this.song.slides
-                      .filter(slide => slide && String(slide.text || '').trim() !== '')
-                      .map(slide => ({
-                          text: String(slide.text).trim(),
-                          isChorus: slide.isChorus === true,
-                          chorusAfter:
-                              slide.isChorus === true
-                                  ? false
-                                  : slide.chorusAfter !== false,
-                      }))
-                : [];
-            return saved.length > 0 ? saved : slidesFromBody(this.song.body);
-        },
-        slideshowSlides() {
-            const selected = this.sourceSlides
-                .map((slide, index) => ({
-                    ...slide,
-                    option: this.slideshowOptions[index] || {
-                        enabled: true,
-                        repetitions: 1,
-                    },
-                }))
-                .filter(slide => slide.option.enabled);
-            const choruses = selected.filter(slide => slide.isChorus);
-            const verses = selected.filter(slide => !slide.isChorus);
-
-            const repeatedChoruses = () =>
-                choruses.flatMap(chorus =>
-                    Array.from(
-                        { length: this.repetitionCount(chorus.option) },
-                        () => ({
-                            text: chorus.text,
-                            isChorus: true,
-                            chorusAfter: false,
-                        }),
-                    ),
-                );
-
-            if (verses.length === 0) return repeatedChoruses();
-
-            const sequence = [];
-            verses.forEach(verse => {
-                sequence.push({
-                    text: verse.text,
-                    isChorus: false,
-                    chorusAfter: verse.chorusAfter,
-                });
-                if (choruses.length > 0 && verse.chorusAfter !== false) {
-                    sequence.push(...repeatedChoruses());
-                }
-            });
-            return sequence;
-        },
-        currentSlide() {
-            return this.slideshowSlides[this.slideshowIndex] || null;
-        },
-        currentSlideText() {
-            return String(this.currentSlide?.text || '').replace(/\r\n?/g, '\n');
-        },
-    },
-    watch: {
-        songId() {
-            this.closeSlideshow();
-            this.fetchSong();
-        },
-        imageUrls() {
-            this.resetImages();
-        },
-        fontSize(value) {
-            localStorage.setItem('fontSize', String(value));
-        },
-        slideshowTheme(value) {
-            localStorage.setItem('slideshowTheme', value);
-        },
-        slideshowFontSize(value) {
-            const normalized = Math.min(96, Math.max(24, Number(value) || 56));
-            localStorage.setItem('slideshowFontSize', String(normalized));
-        },
-        slideshowSlides(value) {
-            if (value.length === 0) {
-                this.slideshowIndex = 0;
-            } else if (this.slideshowIndex >= value.length) {
-                this.slideshowIndex = value.length - 1;
-            }
-        },
-    },
-    created() {
-        this.fetchSongIds();
-        this.fetchSong();
-    },
-    mounted() {
-        document.addEventListener('keydown', this.onSlideshowKeydown);
-        document.addEventListener('fullscreenchange', this.onFullscreenChange);
-    },
-    beforeUnmount() {
-        document.removeEventListener('keydown', this.onSlideshowKeydown);
-        document.removeEventListener('fullscreenchange', this.onFullscreenChange);
-        this.closeSlideshow();
-    },
-    methods: {
-        openSlideshow() {
-            if (this.sourceSlides.length === 0) return;
-            this.prepareSlideshowOptions();
-            this.slideshowIndex = 0;
-            this.slideshowSettingsOpen = this.slideshowSlides.length === 0;
-            this.previousBodyOverflow = document.body.style.overflow;
-            document.body.style.overflow = 'hidden';
-            this.slideshowOpen = true;
-            this.$nextTick(() => {
-                const element = this.$refs.slideshow;
-                if (!element?.requestFullscreen) return;
-                element
-                    .requestFullscreen()
-                    .then(() => {
-                        this.fullscreenActive = true;
-                    })
-                    .catch(() => {
-                        this.fullscreenActive = false;
-                    });
-            });
-        },
-        closeSlideshow() {
-            if (!this.slideshowOpen && !this.fullscreenActive) return;
-            this.slideshowOpen = false;
-            this.slideshowSettingsOpen = false;
-            document.body.style.overflow = this.previousBodyOverflow;
-            if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => {});
-            }
-            this.fullscreenActive = false;
-        },
-        previousSlide() {
-            this.slideshowIndex = Math.max(0, this.slideshowIndex - 1);
-        },
-        nextSlide() {
-            if (this.slideshowSlides.length === 0) return;
-            this.slideshowIndex = Math.min(
-                this.slideshowSlides.length - 1,
-                this.slideshowIndex + 1,
-            );
-        },
-        onSlideshowKeydown(event) {
-            if (!this.slideshowOpen) return;
-            if (this.slideshowSettingsOpen) {
-                if (event.key === 'Escape') {
-                    event.preventDefault();
-                    this.slideshowSettingsOpen = false;
-                }
-                return;
-            }
-            if (['ArrowRight', 'PageDown', ' '].includes(event.key)) {
-                event.preventDefault();
-                this.nextSlide();
-            } else if (['ArrowLeft', 'PageUp'].includes(event.key)) {
-                event.preventDefault();
-                this.previousSlide();
-            } else if (event.key === 'Home') {
-                event.preventDefault();
-                this.slideshowIndex = 0;
-            } else if (event.key === 'End') {
-                event.preventDefault();
-                this.slideshowIndex = this.slideshowSlides.length - 1;
-            } else if (event.key === 'Escape') {
-                this.closeSlideshow();
-            }
-        },
-        prepareSlideshowOptions() {
-            if (this.slideshowOptions.length === this.sourceSlides.length) return;
-            this.slideshowOptions = this.sourceSlides.map(() => ({
-                enabled: true,
-                repetitions: 1,
-            }));
-        },
-        setAllSlidesEnabled(enabled) {
-            this.slideshowOptions.forEach(option => {
-                option.enabled = enabled;
-            });
-        },
-        repetitionCount(option) {
-            return Math.min(10, Math.max(1, parseInt(option?.repetitions, 10) || 1));
-        },
-        normalizeRepetitions(option) {
-            option.repetitions = this.repetitionCount(option);
-        },
-        adjustSlideshowFontSize(delta) {
-            this.slideshowFontSize = Math.min(
-                96,
-                Math.max(24, Number(this.slideshowFontSize) + delta),
-            );
-        },
-        slideOptionTitle(slide, index) {
-            return slide.isChorus
-                ? `Priedainis Â· stulpelis ${index + 1}`
-                : `Posmas Â· stulpelis ${index + 1}`;
-        },
-        slideOptionPreview(slide) {
-            const firstLine = String(slide.text || '').split(/\r?\n/, 1)[0].trim();
-            return firstLine.length > 70 ? `${firstLine.slice(0, 70)}â€¦` : firstLine;
-        },
-        onFullscreenChange() {
-            if (
-                this.slideshowOpen &&
-                this.fullscreenActive &&
-                !document.fullscreenElement
-            ) {
-                this.slideshowOpen = false;
-                this.fullscreenActive = false;
-                document.body.style.overflow = this.previousBodyOverflow;
-            }
-        },
-        resetImages() {
-            this.imageLoaded = this.imageUrls.map(() => false);
-            this.imageErrored = this.imageUrls.map(() => false);
-        },
-        onImageError(index) {
-            this.imageLoaded[index] = true;
-            this.imageErrored[index] = true;
-        },
-        audioUrl(type) {
-            return `${config.audioBase}/${type}/${this.song.songId}.mp3`;
-        },
-        fetchSongIds() {
-            this.$songs
-                .orderBy('id')
-                .toArray()
-                .then(songs => {
-                    this.songIds = songs.map(song => song.songId);
-                })
-                .catch(error => console.error(error));
-        },
-        fetchSong() {
-            this.$songs
-                .where('songId')
-                .equals(this.songId)
-                .first()
-                .then(song => {
-                    this.song = song || null;
-                    this.slideshowOptions = [];
-                    this.prepareSlideshowOptions();
-                    this.resetImages();
-                })
-                .catch(error => console.error(error));
-        },
-        goTo(songId) {
-            if (songId) this.$router.push(`/song/${songId}`);
-        },
-        toggleFavorite() {
-            const next = this.song.favorited ? 0 : 1;
-            this.$songs
-                .update(this.song.id, { favorited: next })
-                .then(updated => {
-                    if (updated) this.song.favorited = next;
-                })
-                .catch(error => console.error(error));
-        },
-        adjustFontSize(delta) {
-            this.fontSize = Math.min(72, Math.max(12, this.fontSize + delta));
-        },
-    },
-};
-</script>
-
-<style lang="scss">
-%button-shadow {
-    border: none;
-    border-radius: 20px;
-    background-color: white;
-    box-shadow: 2px 2px 5px 0 rgba(0, 0, 0, 0.4);
-}
-
-.image-format-container {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 10px;
-}
-
-.image-format-button {
-    font-size: 16px;
-    line-height: 1.5;
-    background-color: transparent;
-    border: none;
-    border-radius: 20px;
-    padding: 10px 20px;
-    margin-right: 10px;
-    color: black;
-    transition: background-color 0.3s, color 0.3s;
-    font-weight: normal;
-}
-
-.image-format-button.selected {
-    background-color: dodgerblue;
-    color: black;
-    font-weight: bold;
-}
-
-.image-format-button:hover:not(.selected) {
-    background-color: lightgray;
-    color: white;
-}
-
-.song__navigation-button {
-    font-size: 18px;
-    line-height: 1.5;
-    @extend %button-shadow;
-    background-color: lightblue;
-    color: black;
-    padding: 8px 12px;
-    font-weight: 500;
-}
-
-.song__navigation-button:focus {
-    outline: none;
-}
-
-.song__navigation-button:hover:not([disabled]) {
-    background-color: dodgerblue;
-}
-
-.song__slideshow-button {
-    font-size: 16px;
-    line-height: 1.5;
-    padding: 7px 13px;
-    color: #111;
-    @extend %button-shadow;
-    background: #d9b26f;
-}
-
-.audio-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 10px;
-}
-
-.audio-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 10px;
-    margin-left: 10px;
-    width: 40px;
-    height: 40px;
-    fill: black;
-}
-
-.audio-player {
-    justify-content: center;
-    display: flex;
-    margin: 10px;
-}
-
-.song-image {
-    justify-content: center;
-    display: grid;
-    margin: 20px;
-}
-
-.song-image img {
-    max-width: 100%;
-    width: auto;
-    height: auto;
-    shape-rendering: crispEdges;
-    image-rendering: optimizeQuality;
-
-    object-fit: cover;
-}
-
-.song__buttons button[disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.song__buttons button:hover:not([disabled]) {
-    background-color: lightgray;
-}
-
-.song {
-    &__title {
-        font-size: 20px;
-        text-align: center;
-        width: auto;
-        margin: 0 0 10px;
-        border-bottom: 1px solid black;
-    }
-
-    &__verse {
-        font-size: 16px;
-        text-align: center;
-        margin: 0 0 20px;
-    }
-
-    &__body {
-        display: inline-block;
-        text-align: left;
-        font-size: 24px;
-        margin-bottom: 20px;
-    }
-
-    &__buttons {
-        justify-content: center;
-        align-items: center;
-        display: flex;
-        padding: 10px 0;
-
-        > :not(:last-child) {
-            margin-right: 10px;
-        }
-    }
-
-    &__favorite-button {
-        display: inline-block;
-        font-size: 20px;
-        line-height: 1;
-        vertical-align: bottom;
-        padding: 0 2px;
-        border: none;
-        color: rgba(228, 179, 99, 1);
-        @extend %button-shadow;
-    }
-
-    &__font-size-button {
-        font-size: 16px;
-        line-height: 1.5;
-        @extend %button-shadow;
-    }
-
-    &__copyright {
-        text-align: center;
-        justify-content: center;
-        display: flex;
-    }
-
-    .icon-audio {
-        display: block;
-        margin: 0 auto;
-    }
-    .image-loader {
-        display: inline-block;
-        position: relative;
-        width: 80px;
-        height: 80px;
-    }
-
-    .image-loader::after {
-        content: ' ';
-        display: block;
-        width: 64px;
-        height: 64px;
-        margin: 8px;
-        border-radius: 50%;
-        border: 6px solid #000;
-        border-color: #000 transparent #000 transparent;
-        animation: image-loader 1.2s linear infinite;
-    }
-
-    @keyframes image-loader {
-        0% {
-            transform: rotate(0deg);
-        }
-        100% {
-            transform: rotate(360deg);
-        }
-    }
-}
-
-.lyrics-show {
-    --lyrics-show-background:
-        radial-gradient(circle at 50% 45%, #263447 0, #111923 48%, #080b10 100%);
-    --lyrics-show-text: #fff;
-    --lyrics-show-muted: rgba(255, 255, 255, 0.72);
-    --lyrics-show-border: rgba(255, 255, 255, 0.35);
-    --lyrics-show-control: rgba(255, 255, 255, 0.1);
-    --lyrics-show-panel: rgba(18, 25, 35, 0.98);
-    --lyrics-show-panel-soft: rgba(255, 255, 255, 0.08);
-    --lyrics-show-shadow: 0 3px 16px rgba(0, 0, 0, 0.55);
-    --lyrics-show-hover: rgba(255, 255, 255, 0.025);
-
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    width: 100vw;
-    height: 100vh;
-    box-sizing: border-box;
-    overflow: hidden;
-    color: var(--lyrics-show-text);
-    background: var(--lyrics-show-background);
-
-    &--light {
-        --lyrics-show-background:
-            radial-gradient(circle at 50% 45%, #fff 0, #f4efe6 58%, #e8dfd1 100%);
-        --lyrics-show-text: #17130d;
-        --lyrics-show-muted: rgba(23, 19, 13, 0.68);
-        --lyrics-show-border: rgba(23, 19, 13, 0.28);
-        --lyrics-show-control: rgba(255, 255, 255, 0.72);
-        --lyrics-show-panel: rgba(255, 253, 248, 0.98);
-        --lyrics-show-panel-soft: rgba(67, 48, 20, 0.07);
-        --lyrics-show-shadow: 0 2px 10px rgba(75, 52, 20, 0.18);
-        --lyrics-show-hover: rgba(67, 48, 20, 0.035);
-    }
-
-    &__click-zone {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        z-index: 1;
-        width: 50%;
-        padding: 0;
-        border: 0;
-        outline: 0;
-        background: transparent;
-        cursor: pointer;
-
-        &--left {
-            left: 0;
-        }
-
-        &--right {
-            right: 0;
-        }
-
-        &:disabled {
-            cursor: default;
-        }
-
-        &:not(:disabled):hover {
-            background: var(--lyrics-show-hover);
-        }
-    }
-
-    &__close,
-    &__settings-button {
-        position: absolute;
-        top: 18px;
-        z-index: 4;
-        width: 48px;
-        height: 48px;
-        padding: 0;
-        border: 1px solid var(--lyrics-show-border);
-        border-radius: 50%;
-        color: var(--lyrics-show-text);
-        background: var(--lyrics-show-control);
-        cursor: pointer;
-    }
-
-    &__close {
-        right: 22px;
-        font-size: 34px;
-        line-height: 42px;
-    }
-
-    &__settings-button {
-        right: 82px;
-        font-size: 27px;
-        line-height: 44px;
-    }
-
-    &__header {
-        z-index: 2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        min-height: 76px;
-        padding: 14px 80px;
-        box-sizing: border-box;
-        color: var(--lyrics-show-muted);
-        font-size: clamp(16px, 2vw, 24px);
-        text-align: center;
-        pointer-events: none;
-
-        strong {
-            padding: 5px 11px;
-            border-radius: 999px;
-            color: #1b1408;
-            background: #d9b26f;
-            font-size: 0.7em;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-    }
-
-    &__content {
-        z-index: 2;
-        align-self: center;
-        justify-self: center;
-        width: min(1200px, 86vw);
-        max-height: 100%;
-        overflow: auto;
-        padding: 30px 0;
-        box-sizing: border-box;
-        font-size: var(--lyrics-font-size, 56px);
-        font-weight: 600;
-        line-height: 1.32;
-        text-align: center;
-        text-wrap: balance;
-        white-space: pre-line;
-        text-shadow: var(--lyrics-show-shadow);
-        pointer-events: none;
-    }
-
-    &__empty {
-        color: var(--lyrics-show-muted);
-        font-size: 0.48em;
-        font-weight: 400;
-    }
-
-    &__settings {
-        position: absolute;
-        top: 76px;
-        right: 20px;
-        bottom: 82px;
-        z-index: 6;
-        width: min(520px, calc(100vw - 40px));
-        box-sizing: border-box;
-        overflow: auto;
-        padding: 20px;
-        border: 1px solid var(--lyrics-show-border);
-        border-radius: 16px;
-        color: var(--lyrics-show-text);
-        background: var(--lyrics-show-panel);
-        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
-    }
-
-    &__settings-header,
-    &__setting-title,
-    &__font-control,
-    &__theme-buttons,
-    &__selection-actions,
-    &__slide-option,
-    &__repeat-control {
-        display: flex;
-        align-items: center;
-    }
-
-    &__settings-header,
-    &__setting-title {
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    &__settings-header {
-        h2 {
-            margin: 0;
-            font-size: 24px;
-        }
-
-        button {
-            width: 38px;
-            height: 38px;
-            border: 1px solid var(--lyrics-show-border);
-            border-radius: 50%;
-            color: var(--lyrics-show-text);
-            background: var(--lyrics-show-control);
-            font-size: 25px;
-            cursor: pointer;
-        }
-    }
-
-    &__setting-group {
-        margin-top: 20px;
-        padding-top: 18px;
-        border-top: 1px solid var(--lyrics-show-border);
-
-        h3 {
-            margin: 0 0 10px;
-            font-size: 17px;
-        }
-
-        p {
-            margin: 3px 0 10px;
-            color: var(--lyrics-show-muted);
-            font-size: 13px;
-            line-height: 1.4;
-        }
-
-        output {
-            color: var(--lyrics-show-muted);
-            font-variant-numeric: tabular-nums;
-        }
-    }
-
-    &__theme-buttons,
-    &__selection-actions {
-        gap: 8px;
-
-        button {
-            padding: 8px 13px;
-            border: 1px solid var(--lyrics-show-border);
-            border-radius: 8px;
-            color: var(--lyrics-show-text);
-            background: var(--lyrics-show-control);
-            cursor: pointer;
-
-            &.selected {
-                border-color: #d9b26f;
-                color: #17130d;
-                background: #d9b26f;
-                font-weight: 700;
-            }
-        }
-    }
-
-    &__selection-actions {
-        flex-shrink: 0;
-
-        button {
-            padding: 6px 9px;
-            font-size: 12px;
-        }
-    }
-
-    &__font-control {
-        gap: 12px;
-
-        input[type='range'] {
-            flex: 1;
-            accent-color: #d9b26f;
-        }
-
-        button {
-            min-width: 45px;
-            height: 38px;
-            border: 1px solid var(--lyrics-show-border);
-            border-radius: 8px;
-            color: var(--lyrics-show-text);
-            background: var(--lyrics-show-control);
-            cursor: pointer;
-        }
-    }
-
-    &__slide-options {
-        display: grid;
-        gap: 8px;
-    }
-
-    &__slide-option {
-        gap: 10px;
-        min-height: 50px;
-        padding: 9px 10px;
-        border-radius: 9px;
-        background: var(--lyrics-show-panel-soft);
-        cursor: pointer;
-
-        &--chorus {
-            box-shadow: inset 4px 0 #d9b26f;
-        }
-
-        > input[type='checkbox'] {
-            flex: 0 0 auto;
-            width: 19px;
-            height: 19px;
-            accent-color: #d9b26f;
-        }
-
-        > span:nth-of-type(1) {
-            min-width: 0;
-            flex: 1;
-
-            strong,
-            small {
-                display: block;
-            }
-
-            small {
-                overflow: hidden;
-                margin-top: 3px;
-                color: var(--lyrics-show-muted);
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-        }
-    }
-
-    &__repeat-control {
-        flex: 0 0 auto;
-        gap: 5px;
-        color: var(--lyrics-show-muted);
-        font-size: 13px;
-
-        input {
-            width: 52px;
-            box-sizing: border-box;
-            padding: 6px;
-            border: 1px solid var(--lyrics-show-border);
-            border-radius: 7px;
-            color: var(--lyrics-show-text);
-            background: var(--lyrics-show-control);
-        }
-    }
-
-    &__controls {
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 20px;
-        min-height: 82px;
-        color: var(--lyrics-show-muted);
-
-        button {
-            width: 52px;
-            height: 44px;
-            border: 1px solid var(--lyrics-show-border);
-            border-radius: 22px;
-            color: var(--lyrics-show-text);
-            background: var(--lyrics-show-control);
-            font-size: 25px;
-            cursor: pointer;
-
-            &:disabled {
-                opacity: 0.25;
-                cursor: default;
-            }
-        }
-    }
-}
-
-@media (max-width: 640px) {
-    .lyrics-show {
-        &__header {
-            min-height: 64px;
-            padding: 10px 66px 10px 18px;
-        }
-
-        &__close {
-            top: 10px;
-            right: 10px;
-            width: 42px;
-            height: 42px;
-            font-size: 29px;
-            line-height: 36px;
-        }
-
-        &__settings-button {
-            top: 10px;
-            right: 60px;
-            width: 42px;
-            height: 42px;
-            font-size: 24px;
-            line-height: 38px;
-        }
-
-        &__settings {
-            top: 62px;
-            right: 8px;
-            bottom: 68px;
-            width: calc(100vw - 16px);
-            padding: 15px;
-        }
-
-        &__content {
-            width: 88vw;
-        }
-
-        &__controls {
-            min-height: 68px;
-        }
-    }
-}
-</style>
+            const base = `${config.notesBase}/${this.imageType}/${this.songßÍö¶‰žËkºwµç@€€€€ô°4(€€€€€€€…Õ‘¥½UÉ°¡ÑåÁ”¤ì4(€€€€€€€€€€€É•ÑÕÉ¸€‘í½¹™¥œ¹…Õ‘¥½	…Í•ô¼‘íÑåÁ•ô¼‘íÑ¡¥Ì¹Í½¹œ¹Í½¹%‘ô¹µÀÍ€ì4(€€€€€€€ô°4(€€€€€€€™•Ñ¡M½¹%‘Ì ¤ì4(€€€€€€€€€€€Ñ¡¥Ì¸‘Í½¹Ì4(€€€€€€€€€€€€€€€€¹½É‘•É	ä ¥œ¤4(€€€€€€€€€€€€€€€€¹Ñ½ÉÉ…ä ¤4(€€€€€€€€€€€€€€€€¹Ñ¡•¸¡Í½¹Ì€ôøì4(€€€€€€€€€€€€€€€€€€€Ñ¡¥Ì¹Í½¹%‘Ì€ôÍ½¹Ì¹µ…À¡Í½¹œ€ôøÍ½¹œ¹Í½¹%¤ì4(€€€€€€€€€€€€€€€ô¤4(€€€€€€€€€€€€€€€€¹…Ñ ¡•ÉÉ½È€ôø½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤¤ì4(€€€€€€€ô°4(€€€€€€€™•Ñ¡M½¹œ ¤ì4(€€€€€€€€€€€Ñ¡¥Ì¸‘Í½¹Ì4(€€€€€€€€€€€€€€€€¹Ý¡•É” Í½¹%œ¤4(€€€€€€€€€€€€€€€€¹•ÅÕ…±Ì¡Ñ¡¥Ì¹Í½¹%¤4(€€€€€€€€€€€€€€€€¹™¥ÉÍÐ ¤4(€€€€€€€€€€€€€€€€¹Ñ¡•¸¡Í½¹œ€ôøì(€€€€€€€€€€€€€€€€€€€Ñ¡¥Ì¹Í½¹œ€ôÍ½¹œñð¹Õ±°ì(€€€€€€€€€€€€€€€€€€€Ñ¡¥Ì¹Í±¥‘•Í¡½Ý=ÁÑ¥½¹Ì€ômtì(€€€€€€€€€€€€€€€€€€€Ñ¡¥Ì¹ÁÉ•Á…É•M±¥‘•Í¡½Ý=ÁÑ¥½¹Ì ¤ì(€€€€€€€€€€€€€€€€€€€Ñ¡¥Ì¹É•Í•Ñ%µ…•Ì ¤ì(€€€€€€€€€€€€€€€ô¤4(€€€€€€€€€€€€€€€€¹…Ñ ¡•ÉÉ½È€ôø½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤¤ì4(€€€€€€€ô°4(€€€€€€€½Q¼¡Í½¹%¤ì4(€€€€€€€€€€€¥˜€¡Í½¹%¤Ñ¡¥Ì¸‘É½ÕÑ•È¹ÁÕÍ ¡€½Í½¹œ¼‘íÍ½¹%‘õ€¤ì4(€€€€€€€ô°4(€€€€€€€Ñ½±•…Ù½É¥Ñ” ¤ì4(€€€€€€€€€€€½¹ÍÐ¹•áÐ€ôÑ¡¥Ì¹Í½¹œ¹™…Ù½É¥Ñ•€ü€À€è€Äì4(€€€€€€€€€€€Ñ¡¥Ì¸‘Í½¹Ì4(€€€€€€€€€€€€€€€€¹ÕÁ‘…Ñ”¡Ñ¡¥Ì¹Í½¹œ¹¥°ì™…Ù½É¥Ñ•è¹•áÐô¤4(€€€€€€€€€€€€€€€€¹Ñ¡•¸¡ÕÁ‘…Ñ•€ôøì4(€€€€€€€€€€€€€€€€€€€¥˜€¡ÕÁ‘…Ñ•¤Ñ¡¥Ì¹Í½¹œ¹™…Ù½É¥Ñ•€ô¹•áÐì4(€€€€€€€€€€€€€€€ô¤4(€€€€€€€€€€€€€€€€¹…Ñ ¡•ÉÉ½È€ôø½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤¤ì4(€€€€€€€ô°4(€€€€€€€…‘©ÕÍÑ½¹ÑM¥é”¡‘•±Ñ„¤ì4(€€€€€€€€€€€Ñ¡¥Ì¹™½¹ÑM¥é”€ô5…Ñ ¹µ¥¸ ÜÈ°5…Ñ ¹µ…à ÄÈ°Ñ¡¥Ì¹™½¹ÑM¥é”€¬‘•±Ñ„¤¤ì4(€€€€€€€ô°4(€€€ô°4)ôì4(ð½ÍÉ¥ÁÐø4(4(ñÍÑå±”±…¹œô‰ÍÍÌˆø4(•‰ÕÑÑ½¸µÍ¡…‘½Üì4(€€€‰½É‘•Èè¹½¹”ì4(€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÈÁÁàì4(€€€‰…­É½Õ¹µ½±½ÈèÝ¡¥Ñ”ì4(€€€‰½àµÍ¡…‘½Üè€ÉÁà€ÉÁà€ÕÁà€ÀÉ‰„ À°€À°€À°€À¸Ð¤ì4)ô4(4(¹¥µ…”µ™½Éµ…Ðµ½¹Ñ…¥¹•Èì4(€€€‘¥ÍÁ±…äè™±•àì4(€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€µ…É¥¸µ‰½ÑÑ½´è€ÄÁÁàì4)ô4(4(¹¥µ…”µ™½Éµ…Ðµ‰ÕÑÑ½¸ì4(€€€™½¹ÐµÍ¥é”è€ÄÙÁàì4(€€€±¥¹”µ¡•¥¡Ðè€Ä¸Ôì4(€€€‰…­É½Õ¹µ½±½ÈèÑÉ…¹ÍÁ…É•¹Ðì4(€€€‰½É‘•Èè¹½¹”ì4(€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÈÁÁàì4(€€€Á…‘‘¥¹œè€ÄÁÁà€ÈÁÁàì4(€€€µ…É¥¸µÉ¥¡Ðè€ÄÁÁàì4(€€€½±½Èè‰±…¬ì4(€€€ÑÉ…¹Í¥Ñ¥½¸è‰…­É½Õ¹µ½±½È€À¸ÍÌ°½±½È€À¸ÍÌì4(€€€™½¹ÐµÝ•¥¡Ðè¹½Éµ…°ì4)ô4(4(¹¥µ…”µ™½Éµ…Ðµ‰ÕÑÑ½¸¹Í•±•Ñ•ì4(€€€‰…­É½Õ¹µ½±½Èè‘½‘•É‰±Õ”ì4(€€€½±½Èè‰±…¬ì4(€€€™½¹ÐµÝ•¥¡Ðè‰½±ì4)ô4(4(¹¥µ…”µ™½Éµ…Ðµ‰ÕÑÑ½¸é¡½Ù•Èé¹½Ð ¹Í•±•Ñ•¤ì4(€€€‰…­É½Õ¹µ½±½Èè±¥¡ÑÉ…äì4(€€€½±½ÈèÝ¡¥Ñ”ì4)ô4(4(¹Í½¹}}¹…Ù¥…Ñ¥½¸µ‰ÕÑÑ½¸ì4(€€€™½¹ÐµÍ¥é”è€ÄáÁàì4(€€€±¥¹”µ¡•¥¡Ðè€Ä¸Ôì4(€€€•áÑ•¹€•‰ÕÑÑ½¸µÍ¡…‘½Üì4(€€€‰…­É½Õ¹µ½±½Èè±¥¡Ñ‰±Õ”ì4(€€€½±½Èè‰±…¬ì4(€€€Á…‘‘¥¹œè€áÁà€ÄÉÁàì4(€€€™½¹ÐµÝ•¥¡Ðè€ÔÀÀì4)ô4(4(¹Í½¹}}¹…Ù¥…Ñ¥½¸µ‰ÕÑÑ½¸é™½ÕÌì4(€€€½ÕÑ±¥¹”è¹½¹”ì4)ô4(4(¹Í½¹}}¹…Ù¥…Ñ¥½¸µ‰ÕÑÑ½¸é¡½Ù•Èé¹½Ð¡m‘¥Í…‰±•‘t¤ì(€€€‰…­É½Õ¹µ½±½Èè‘½‘•É‰±Õ”ì)ô((¹Í½¹}}Í±¥‘•Í¡½Üµ‰ÕÑÑ½¸ì(€€€™½¹ÐµÍ¥é”è€ÄÙÁàì(€€€±¥¹”µ¡•¥¡Ðè€Ä¸Ôì(€€€Á…‘‘¥¹œè€ÝÁà€ÄÍÁàì(€€€½±½Èè€ŒÄÄÄì(€€€•áÑ•¹€•‰ÕÑÑ½¸µÍ¡…‘½Üì(€€€‰…­É½Õ¹è€åˆÈÙ˜ì)ô(4(¹…Õ‘¥¼µ½¹Ñ…¥¹•Èì4(€€€‘¥ÍÁ±…äè™±•àì4(€€€…±¥¸µ¥Ñ•µÌè•¹Ñ•Èì4(€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€µ…É¥¸µ‰½ÑÑ½´è€ÄÁÁàì4)ô4(4(¹…Õ‘¥¼µ¥½¸ì4(€€€‘¥ÍÁ±…äè™±•àì4(€€€…±¥¸µ¥Ñ•µÌè•¹Ñ•Èì4(€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€µ…É¥¸µÉ¥¡Ðè€ÄÁÁàì4(€€€µ…É¥¸µ±•™Ðè€ÄÁÁàì4(€€€Ý¥‘Ñ è€ÐÁÁàì4(€€€¡•¥¡Ðè€ÐÁÁàì4(€€€™¥±°è‰±…¬ì4)ô4(4(¹…Õ‘¥¼µÁ±…å•Èì4(€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€‘¥ÍÁ±…äè™±•àì4(€€€µ…É¥¸è€ÄÁÁàì4)ô4(4(¹Í½¹œµ¥µ…”ì4(€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€‘¥ÍÁ±…äèÉ¥ì4(€€€µ…É¥¸è€ÈÁÁàì4)ô4(4(¹Í½¹œµ¥µ…”¥µœì4(€€€µ…àµÝ¥‘Ñ è€ÄÀÀ”ì4(€€€Ý¥‘Ñ è…ÕÑ¼ì4(€€€¡•¥¡Ðè…ÕÑ¼ì4(€€€Í¡…Á”µÉ•¹‘•É¥¹œèÉ¥ÍÁ‘•Ìì4(€€€¥µ…”µÉ•¹‘•É¥¹œè½ÁÑ¥µ¥é•EÕ…±¥Ñäì4(4(€€€½‰©•Ðµ™¥Ðè½Ù•Èì4)ô4(4(¹Í½¹}}‰ÕÑÑ½¹Ì‰ÕÑÑ½¹m‘¥Í…‰±•‘tì4(€€€½Á…¥Ñäè€À¸Ôì4(€€€ÕÉÍ½Èè¹½Ðµ…±±½Ý•ì4)ô4(4(¹Í½¹}}‰ÕÑÑ½¹Ì‰ÕÑÑ½¸é¡½Ù•Èé¹½Ð¡m‘¥Í…‰±•‘t¤ì4(€€€‰…­É½Õ¹µ½±½Èè±¥¡ÑÉ…äì4)ô4(4(¹Í½¹œì4(€€€€™}}Ñ¥Ñ±”ì4(€€€€€€€™½¹ÐµÍ¥é”è€ÈÁÁàì4(€€€€€€€Ñ•áÐµ…±¥¸è•¹Ñ•Èì4(€€€€€€€Ý¥‘Ñ è…ÕÑ¼ì4(€€€€€€€µ…É¥¸è€À€À€ÄÁÁàì4(€€€€€€€‰½É‘•Èµ‰½ÑÑ½´è€ÅÁàÍ½±¥‰±…¬ì4(€€€ô4(4(€€€€™}}Ù•ÉÍ”ì4(€€€€€€€™½¹ÐµÍ¥é”è€ÄÙÁàì4(€€€€€€€Ñ•áÐµ…±¥¸è•¹Ñ•Èì4(€€€€€€€µ…É¥¸è€À€À€ÈÁÁàì4(€€€ô4(4(€€€€™}}‰½‘äì4(€€€€€€€‘¥ÍÁ±…äè¥¹±¥¹”µ‰±½¬ì4(€€€€€€€Ñ•áÐµ…±¥¸è±•™Ðì4(€€€€€€€™½¹ÐµÍ¥é”è€ÈÑÁàì4(€€€€€€€µ…É¥¸µ‰½ÑÑ½´è€ÈÁÁàì4(€€€ô4(4(€€€€™}}‰ÕÑÑ½¹Ìì4(€€€€€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€€€€€…±¥¸µ¥Ñ•µÌè•¹Ñ•Èì4(€€€€€€€‘¥ÍÁ±…äè™±•àì4(€€€€€€€Á…‘‘¥¹œè€ÄÁÁà€Àì4(4(€€€€€€€€ø€é¹½Ð é±…ÍÐµ¡¥±¤ì4(€€€€€€€€€€€µ…É¥¸µÉ¥¡Ðè€ÄÁÁàì4(€€€€€€€ô4(€€€ô4(4(€€€€™}}™…Ù½É¥Ñ”µ‰ÕÑÑ½¸ì4(€€€€€€€‘¥ÍÁ±…äè¥¹±¥¹”µ‰±½¬ì4(€€€€€€€™½¹ÐµÍ¥é”è€ÈÁÁàì4(€€€€€€€±¥¹”µ¡•¥¡Ðè€Äì4(€€€€€€€Ù•ÉÑ¥…°µ…±¥¸è‰½ÑÑ½´ì4(€€€€€€€Á…‘‘¥¹œè€À€ÉÁàì4(€€€€€€€‰½É‘•Èè¹½¹”ì4(€€€€€€€½±½ÈèÉ‰„ ÈÈà°€ÄÜä°€ää°€Ä¤ì4(€€€€€€€•áÑ•¹€•‰ÕÑÑ½¸µÍ¡…‘½Üì4(€€€ô4(4(€€€€™}}™½¹ÐµÍ¥é”µ‰ÕÑÑ½¸ì4(€€€€€€€™½¹ÐµÍ¥é”è€ÄÙÁàì4(€€€€€€€±¥¹”µ¡•¥¡Ðè€Ä¸Ôì4(€€€€€€€•áÑ•¹€•‰ÕÑÑ½¸µÍ¡…‘½Üì4(€€€ô4(4(€€€€™}}½ÁåÉ¥¡Ðì4(€€€€€€€Ñ•áÐµ…±¥¸è•¹Ñ•Èì4(€€€€€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì4(€€€€€€€‘¥ÍÁ±…äè™±•àì4(€€€ô4(4(€€€€¹¥½¸µ…Õ‘¥¼ì4(€€€€€€€‘¥ÍÁ±…äè‰±½¬ì4(€€€€€€€µ…É¥¸è€À…ÕÑ¼ì4(€€€ô4(€€€€¹¥µ…”µ±½…‘•Èì4(€€€€€€€‘¥ÍÁ±…äè¥¹±¥¹”µ‰±½¬ì4(€€€€€€€Á½Í¥Ñ¥½¸èÉ•±…Ñ¥Ù”ì4(€€€€€€€Ý¥‘Ñ è€àÁÁàì4(€€€€€€€¡•¥¡Ðè€àÁÁàì4(€€€ô4(4(€€€€¹¥µ…”µ±½…‘•Èèé…™Ñ•Èì4(€€€€€€€½¹Ñ•¹Ðè€œ€œì4(€€€€€€€‘¥ÍÁ±…äè‰±½¬ì4(€€€€€€€Ý¥‘Ñ è€ØÑÁàì4(€€€€€€€¡•¥¡Ðè€ØÑÁàì4(€€€€€€€µ…É¥¸è€áÁàì4(€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÔÀ”ì4(€€€€€€€‰½É‘•Èè€ÙÁàÍ½±¥€ŒÀÀÀì4(€€€€€€€‰½É‘•Èµ½±½Èè€ŒÀÀÀÑÉ…¹ÍÁ…É•¹Ð€ŒÀÀÀÑÉ…¹ÍÁ…É•¹Ðì4(€€€€€€€…¹¥µ…Ñ¥½¸è¥µ…”µ±½…‘•È€Ä¸ÉÌ±¥¹•…È¥¹™¥¹¥Ñ”ì4(€€€ô4(4(€€€­•å™É…µ•Ì¥µ…”µ±½…‘•Èì4(€€€€€€€€À”ì4(€€€€€€€€€€€ÑÉ…¹Í™½É´èÉ½Ñ…Ñ” Á‘•œ¤ì4(€€€€€€€ô4(€€€€€€€€ÄÀÀ”ì4(€€€€€€€€€€€ÑÉ…¹Í™½É´èÉ½Ñ…Ñ” ÌØÁ‘•œ¤ì4(€€€€€€€ô4(€€€ô4)ô((¹±åÉ¥ÌµÍ¡½Üì(€€€€´µ±åÉ¥ÌµÍ¡½Üµ‰…­É½Õ¹è(€€€€€€€É…‘¥…°µÉ…‘¥•¹Ð¡¥É±”…Ð€ÔÀ”€ÐÔ”°€ŒÈØÌÐÐÜ€À°€ŒÄÄÄäÈÌ€Ðà”°€ŒÀàÁˆÄÀ€ÄÀÀ”¤ì(€€€€´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐè€™™˜ì(€€€€´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•èÉ‰„ ÈÔÔ°€ÈÔÔ°€ÈÔÔ°€À¸ÜÈ¤ì(€€€€´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•ÈèÉ‰„ ÈÔÔ°€ÈÔÔ°€ÈÔÔ°€À¸ÌÔ¤ì(€€€€´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°èÉ‰„ ÈÔÔ°€ÈÔÔ°€ÈÔÔ°€À¸Ä¤ì(€€€€´µ±åÉ¥ÌµÍ¡½ÜµÁ…¹•°èÉ‰„ Äà°€ÈÔ°€ÌÔ°€À¸äà¤ì(€€€€´µ±åÉ¥ÌµÍ¡½ÜµÁ…¹•°µÍ½™ÐèÉ‰„ ÈÔÔ°€ÈÔÔ°€ÈÔÔ°€À¸Àà¤ì(€€€€´µ±åÉ¥ÌµÍ¡½ÜµÍ¡…‘½Üè€À€ÍÁà€ÄÙÁàÉ‰„ À°€À°€À°€À¸ÔÔ¤ì(€€€€´µ±åÉ¥ÌµÍ¡½Üµ¡½Ù•ÈèÉ‰„ ÈÔÔ°€ÈÔÔ°€ÈÔÔ°€À¸ÀÈÔ¤ì((€€€Á½Í¥Ñ¥½¸è™¥á•ì(€€€¥¹Í•Ðè€Àì(€€€èµ¥¹‘•àè€ÄÀÀÀÀì(€€€‘¥ÍÁ±…äèÉ¥ì(€€€É¥µÑ•µÁ±…Ñ”µÉ½ÝÌè…ÕÑ¼µ¥¹µ…à À°€Å™È¤…ÕÑ¼ì(€€€Ý¥‘Ñ è€ÄÀÁÙÜì(€€€¡•¥¡Ðè€ÄÀÁÙ ì(€€€‰½àµÍ¥é¥¹œè‰½É‘•Èµ‰½àì(€€€½Ù•É™±½Üè¡¥‘‘•¸ì(€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ‰…­É½Õ¹¤ì((€€€€˜´µ±¥¡Ðì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½Üµ‰…­É½Õ¹è(€€€€€€€€€€€É…‘¥…°µÉ…‘¥•¹Ð¡¥É±”…Ð€ÔÀ”€ÐÔ”°€™™˜€À°€˜Ñ•™”Ø€Ôà”°€”á‘™Ä€ÄÀÀ”¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐè€ŒÄÜÄÌÁì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•èÉ‰„ ÈÌ°€Ää°€ÄÌ°€À¸Øà¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•ÈèÉ‰„ ÈÌ°€Ää°€ÄÌ°€À¸Èà¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°èÉ‰„ ÈÔÔ°€ÈÔÔ°€ÈÔÔ°€À¸ÜÈ¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½ÜµÁ…¹•°èÉ‰„ ÈÔÔ°€ÈÔÌ°€ÈÐà°€À¸äà¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½ÜµÁ…¹•°µÍ½™ÐèÉ‰„ ØÜ°€Ðà°€ÈÀ°€À¸ÀÜ¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½ÜµÍ¡…‘½Üè€À€ÉÁà€ÄÁÁàÉ‰„ ÜÔ°€ÔÈ°€ÈÀ°€À¸Äà¤ì(€€€€€€€€´µ±åÉ¥ÌµÍ¡½Üµ¡½Ù•ÈèÉ‰„ ØÜ°€Ðà°€ÈÀ°€À¸ÀÌÔ¤ì(€€€ô((€€€€™}}±¥¬µé½¹”ì(€€€€€€€Á½Í¥Ñ¥½¸è…‰Í½±ÕÑ”ì(€€€€€€€Ñ½Àè€Àì(€€€€€€€‰½ÑÑ½´è€Àì(€€€€€€€èµ¥¹‘•àè€Äì(€€€€€€€Ý¥‘Ñ è€ÔÀ”ì(€€€€€€€Á…‘‘¥¹œè€Àì(€€€€€€€‰½É‘•Èè€Àì(€€€€€€€½ÕÑ±¥¹”è€Àì(€€€€€€€‰…­É½Õ¹èÑÉ…¹ÍÁ…É•¹Ðì(€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì((€€€€€€€€˜´µ±•™Ðì(€€€€€€€€€€€±•™Ðè€Àì(€€€€€€€ô((€€€€€€€€˜´µÉ¥¡Ðì(€€€€€€€€€€€É¥¡Ðè€Àì(€€€€€€€ô((€€€€€€€€˜é‘¥Í…‰±•ì(€€€€€€€€€€€ÕÉÍ½Èè‘•™…Õ±Ðì(€€€€€€€ô((€€€€€€€€˜é¹½Ð é‘¥Í…‰±•¤é¡½Ù•Èì(€€€€€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ¡½Ù•È¤ì(€€€€€€€ô(€€€ô((€€€€™}}±½Í”°(€€€€™}}Í•ÑÑ¥¹Ìµ‰ÕÑÑ½¸ì(€€€€€€€Á½Í¥Ñ¥½¸è…‰Í½±ÕÑ”ì(€€€€€€€Ñ½Àè€ÄáÁàì(€€€€€€€èµ¥¹‘•àè€Ðì(€€€€€€€Ý¥‘Ñ è€ÐáÁàì(€€€€€€€¡•¥¡Ðè€ÐáÁàì(€€€€€€€Á…‘‘¥¹œè€Àì(€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÔÀ”ì(€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°¤ì(€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì(€€€ô((€€€€™}}±½Í”ì(€€€€€€€É¥¡Ðè€ÈÉÁàì(€€€€€€€™½¹ÐµÍ¥é”è€ÌÑÁàì(€€€€€€€±¥¹”µ¡•¥¡Ðè€ÐÉÁàì(€€€ô((€€€€™}}Í•ÑÑ¥¹Ìµ‰ÕÑÑ½¸ì(€€€€€€€É¥¡Ðè€àÉÁàì(€€€€€€€™½¹ÐµÍ¥é”è€ÈÝÁàì(€€€€€€€±¥¹”µ¡•¥¡Ðè€ÐÑÁàì(€€€ô((€€€€™}}¡•…‘•Èì(€€€€€€€èµ¥¹‘•àè€Èì(€€€€€€€‘¥ÍÁ±…äè™±•àì(€€€€€€€…±¥¸µ¥Ñ•µÌè•¹Ñ•Èì(€€€€€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì(€€€€€€€…Àè€ÄÑÁàì(€€€€€€€µ¥¸µ¡•¥¡Ðè€ÜÙÁàì(€€€€€€€Á…‘‘¥¹œè€ÄÑÁà€àÁÁàì(€€€€€€€‰½àµÍ¥é¥¹œè‰½É‘•Èµ‰½àì(€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì(€€€€€€€™½¹ÐµÍ¥é”è±…µÀ ÄÙÁà°€ÉÙÜ°€ÈÑÁà¤ì(€€€€€€€Ñ•áÐµ…±¥¸è•¹Ñ•Èì(€€€€€€€Á½¥¹Ñ•Èµ•Ù•¹ÑÌè¹½¹”ì((€€€€€€€ÍÑÉ½¹œì(€€€€€€€€€€€Á…‘‘¥¹œè€ÕÁà€ÄÅÁàì(€€€€€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ääåÁàì(€€€€€€€€€€€½±½Èè€ŒÅˆÄÐÀàì(€€€€€€€€€€€‰…­É½Õ¹è€åˆÈÙ˜ì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€À¸Ý•´ì(€€€€€€€€€€€Ñ•áÐµÑÉ…¹Í™½É´èÕÁÁ•É…Í”ì(€€€€€€€€€€€±•ÑÑ•ÈµÍÁ…¥¹œè€À¸Àá•´ì(€€€€€€€ô(€€€ô((€€€€™}}½¹Ñ•¹Ðì(€€€€€€€èµ¥¹‘•àè€Èì(€€€€€€€…±¥¸µÍ•±˜è•¹Ñ•Èì(€€€€€€€©ÕÍÑ¥™äµÍ•±˜è•¹Ñ•Èì(€€€€€€€Ý¥‘Ñ èµ¥¸ ÄÈÀÁÁà°€àÙÙÜ¤ì(€€€€€€€µ…àµ¡•¥¡Ðè€ÄÀÀ”ì(€€€€€€€½Ù•É™±½Üè¡¥‘‘•¸ì(€€€€€€€Á…‘‘¥¹œè€ÌÁÁà€Àì(€€€€€€€‰½àµÍ¥é¥¹œè‰½É‘•Èµ‰½àì(€€€€€€€™½¹ÐµÍ¥é”èÙ…È ´µ±åÉ¥Ìµ™½¹ÐµÍ¥é”°€ÔÙÁà¤ì(€€€€€€€™½¹ÐµÝ•¥¡Ðè€ØÀÀì(€€€€€€€±¥¹”µ¡•¥¡Ðè€Ä¸ÌÈì(€€€€€€€Ñ•áÐµ…±¥¸è•¹Ñ•Èì(€€€€€€€Ñ•áÐµÝÉ…Àè‰…±…¹”ì(€€€€€€€Ý¡¥Ñ”µÍÁ…”èÁÉ”µ±¥¹”ì(€€€€€€€½Ù•É™±½ÜµÝÉ…Àè…¹åÝ¡•É”ì(€€€€€€€Ñ•áÐµÍ¡…‘½ÜèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÍ¡…‘½Ü¤ì(€€€€€€€Á½¥¹Ñ•Èµ•Ù•¹ÑÌè¹½¹”ì(€€€ô((€€€€™}}•µÁÑäì(€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì(€€€€€€€™½¹ÐµÍ¥é”è€À¸Ðá•´ì(€€€€€€€™½¹ÐµÝ•¥¡Ðè€ÐÀÀì(€€€ô((€€€€™}}Í•ÑÑ¥¹Ìì(€€€€€€€Á½Í¥Ñ¥½¸è…‰Í½±ÕÑ”ì(€€€€€€€Ñ½Àè€ÜÙÁàì(€€€€€€€É¥¡Ðè€ÈÁÁàì(€€€€€€€‰½ÑÑ½´è€àÉÁàì(€€€€€€€èµ¥¹‘•àè€Øì(€€€€€€€Ý¥‘Ñ èµ¥¸ ÔÈÁÁà°…±Œ ÄÀÁÙÜ€´€ÐÁÁà¤¤ì(€€€€€€€‰½àµÍ¥é¥¹œè‰½É‘•Èµ‰½àì(€€€€€€€½Ù•É™±½Üè…ÕÑ¼ì(€€€€€€€Á…‘‘¥¹œè€ÈÁÁàì(€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÄÙÁàì(€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÁ…¹•°¤ì(€€€€€€€‰½àµÍ¡…‘½Üè€À€ÄáÁà€ÔÕÁàÉ‰„ À°€À°€À°€À¸ÌÈ¤ì(€€€ô((€€€€™}}Í•ÑÑ¥¹Ìµ¡•…‘•È°(€€€€™}}Í•ÑÑ¥¹œµÑ¥Ñ±”°(€€€€™}}™½¹Ðµ½¹ÑÉ½°°(€€€€™}}Ñ¡•µ”µ‰ÕÑÑ½¹Ì°(€€€€™}}Í•±•Ñ¥½¸µ…Ñ¥½¹Ì°(€€€€™}}Í±¥‘”µ½ÁÑ¥½¸°(€€€€™}}É•Á•…Ðµ½¹ÑÉ½°ì(€€€€€€€‘¥ÍÁ±…äè™±•àì(€€€€€€€…±¥¸µ¥Ñ•µÌè•¹Ñ•Èì(€€€ô((€€€€™}}Í•ÑÑ¥¹Ìµ¡•…‘•È°(€€€€™}}Í•ÑÑ¥¹œµÑ¥Ñ±”ì(€€€€€€€©ÕÍÑ¥™äµ½¹Ñ•¹ÐèÍÁ…”µ‰•ÑÝ••¸ì(€€€€€€€…Àè€ÄÉÁàì(€€€ô((€€€€™}}Í•ÑÑ¥¹Ìµ¡•…‘•Èì(€€€€€€€ Èì(€€€€€€€€€€€µ…É¥¸è€Àì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÈÑÁàì(€€€€€€€ô((€€€€€€€‰ÕÑÑ½¸ì(€€€€€€€€€€€Ý¥‘Ñ è€ÌáÁàì(€€€€€€€€€€€¡•¥¡Ðè€ÌáÁàì(€€€€€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÔÀ”ì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°¤ì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÈÕÁàì(€€€€€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì(€€€€€€€ô(€€€ô((€€€€™}}Í•ÑÑ¥¹œµÉ½ÕÀì(€€€€€€€µ…É¥¸µÑ½Àè€ÈÁÁàì(€€€€€€€Á…‘‘¥¹œµÑ½Àè€ÄáÁàì(€€€€€€€‰½É‘•ÈµÑ½Àè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì((€€€€€€€ Ìì(€€€€€€€€€€€µ…É¥¸è€À€À€ÄÁÁàì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÄÝÁàì(€€€€€€€ô((€€€€€€€Àì(€€€€€€€€€€€µ…É¥¸è€ÍÁà€À€ÄÁÁàì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÄÍÁàì(€€€€€€€€€€€±¥¹”µ¡•¥¡Ðè€Ä¸Ðì(€€€€€€€ô((€€€€€€€½ÕÑÁÕÐì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì(€€€€€€€€€€€™½¹ÐµÙ…É¥…¹Ðµ¹Õµ•É¥ŒèÑ…‰Õ±…Èµ¹ÕµÌì(€€€€€€€ô(€€€ô((€€€€™}}Ñ¡•µ”µ‰ÕÑÑ½¹Ì°(€€€€™}}Í•±•Ñ¥½¸µ…Ñ¥½¹Ìì(€€€€€€€…Àè€áÁàì((€€€€€€€‰ÕÑÑ½¸ì(€€€€€€€€€€€Á…‘‘¥¹œè€áÁà€ÄÍÁàì(€€€€€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€áÁàì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°¤ì(€€€€€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì((€€€€€€€€€€€€˜¹Í•±•Ñ•ì(€€€€€€€€€€€€€€€‰½É‘•Èµ½±½Èè€åˆÈÙ˜ì(€€€€€€€€€€€€€€€½±½Èè€ŒÄÜÄÌÁì(€€€€€€€€€€€€€€€‰…­É½Õ¹è€åˆÈÙ˜ì(€€€€€€€€€€€€€€€™½¹ÐµÝ•¥¡Ðè€ÜÀÀì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ô((€€€€™}}Í•±•Ñ¥½¸µ…Ñ¥½¹Ìì(€€€€€€€™±•àµÍ¡É¥¹¬è€Àì((€€€€€€€‰ÕÑÑ½¸ì(€€€€€€€€€€€Á…‘‘¥¹œè€ÙÁà€åÁàì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÄÉÁàì(€€€€€€€ô(€€€ô((€€€€™}}™½¹Ðµ½¹ÑÉ½°ì(€€€€€€€…Àè€ÄÉÁàì((€€€€€€€¥¹ÁÕÑmÑåÁ”ôÉ…¹”tì(€€€€€€€€€€€™±•àè€Äì(€€€€€€€€€€€…•¹Ðµ½±½Èè€åˆÈÙ˜ì(€€€€€€€ô((€€€€€€€‰ÕÑÑ½¸ì(€€€€€€€€€€€µ¥¸µÝ¥‘Ñ è€ÐÕÁàì(€€€€€€€€€€€¡•¥¡Ðè€ÌáÁàì(€€€€€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€áÁàì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°¤ì(€€€€€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì(€€€€€€€ô(€€€ô((€€€€™}}Í±¥‘”µ½ÁÑ¥½¹Ìì(€€€€€€€‘¥ÍÁ±…äèÉ¥ì(€€€€€€€…Àè€áÁàì(€€€ô((€€€€™}}Í±¥‘”µ½ÁÑ¥½¸ì(€€€€€€€…Àè€ÄÁÁàì(€€€€€€€µ¥¸µ¡•¥¡Ðè€ÔÁÁàì(€€€€€€€Á…‘‘¥¹œè€åÁà€ÄÁÁàì(€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€åÁàì(€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÁ…¹•°µÍ½™Ð¤ì(€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì((€€€€€€€€˜´µ¡½ÉÕÌì(€€€€€€€€€€€‰½àµÍ¡…‘½Üè¥¹Í•Ð€ÑÁà€À€åˆÈÙ˜ì(€€€€€€€ô((€€€€€€€€ø¥¹ÁÕÑmÑåÁ”ô¡•­‰½àtì(€€€€€€€€€€€™±•àè€À€À…ÕÑ¼ì(€€€€€€€€€€€Ý¥‘Ñ è€ÄåÁàì(€€€€€€€€€€€¡•¥¡Ðè€ÄåÁàì(€€€€€€€€€€€…•¹Ðµ½±½Èè€åˆÈÙ˜ì(€€€€€€€ô((€€€€€€€€øÍÁ…¸é¹Ñ µ½˜µÑåÁ” Ä¤ì(€€€€€€€€€€€µ¥¸µÝ¥‘Ñ è€Àì(€€€€€€€€€€€™±•àè€Äì((€€€€€€€€€€€ÍÑÉ½¹œ°(€€€€€€€€€€€Íµ…±°ì(€€€€€€€€€€€€€€€‘¥ÍÁ±…äè‰±½¬ì(€€€€€€€€€€€ô((€€€€€€€€€€€Íµ…±°ì(€€€€€€€€€€€€€€€½Ù•É™±½Üè¡¥‘‘•¸ì(€€€€€€€€€€€€€€€µ…É¥¸µÑ½Àè€ÍÁàì(€€€€€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì(€€€€€€€€€€€€€€€Ñ•áÐµ½Ù•É™±½Üè•±±¥ÁÍ¥Ìì(€€€€€€€€€€€€€€€Ý¡¥Ñ”µÍÁ…”è¹½ÝÉ…Àì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ô((€€€€™}}É•Á•…Ðµ½¹ÑÉ½°ì(€€€€€€€™±•àè€À€À…ÕÑ¼ì(€€€€€€€…Àè€ÕÁàì(€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì(€€€€€€€™½¹ÐµÍ¥é”è€ÄÍÁàì((€€€€€€€¥¹ÁÕÐì(€€€€€€€€€€€Ý¥‘Ñ è€ÔÉÁàì(€€€€€€€€€€€‰½àµÍ¥é¥¹œè‰½É‘•Èµ‰½àì(€€€€€€€€€€€Á…‘‘¥¹œè€ÙÁàì(€€€€€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÝÁàì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°¤ì(€€€€€€€ô(€€€ô((€€€€™}}½¹ÑÉ½±Ìì(€€€€€€€èµ¥¹‘•àè€Ìì(€€€€€€€‘¥ÍÁ±…äè™±•àì(€€€€€€€…±¥¸µ¥Ñ•µÌè•¹Ñ•Èì(€€€€€€€©ÕÍÑ¥™äµ½¹Ñ•¹Ðè•¹Ñ•Èì(€€€€€€€…Àè€ÈÁÁàì(€€€€€€€µ¥¸µ¡•¥¡Ðè€àÉÁàì(€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµµÕÑ•¤ì((€€€€€€€‰ÕÑÑ½¸ì(€€€€€€€€€€€Ý¥‘Ñ è€ÔÉÁàì(€€€€€€€€€€€¡•¥¡Ðè€ÐÑÁàì(€€€€€€€€€€€‰½É‘•Èè€ÅÁàÍ½±¥Ù…È ´µ±åÉ¥ÌµÍ¡½Üµ‰½É‘•È¤ì(€€€€€€€€€€€‰½É‘•ÈµÉ…‘¥ÕÌè€ÈÉÁàì(€€€€€€€€€€€½±½ÈèÙ…È ´µ±åÉ¥ÌµÍ¡½ÜµÑ•áÐ¤ì(€€€€€€€€€€€‰…­É½Õ¹èÙ…È ´µ±åÉ¥ÌµÍ¡½Üµ½¹ÑÉ½°¤ì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÈÕÁàì(€€€€€€€€€€€ÕÉÍ½ÈèÁ½¥¹Ñ•Èì((€€€€€€€€€€€€˜é‘¥Í…‰±•ì(€€€€€€€€€€€€€€€½Á…¥Ñäè€À¸ÈÔì(€€€€€€€€€€€€€€€ÕÉÍ½Èè‘•™…Õ±Ðì(€€€€€€€€€€€ô(€€€€€€€ô(€€€ô)ô()µ•‘¥„€¡µ…àµÝ¥‘Ñ è€ØÐÁÁà¤ì(€€€€¹±åÉ¥ÌµÍ¡½Üì(€€€€€€€€™}}¡•…‘•Èì(€€€€€€€€€€€µ¥¸µ¡•¥¡Ðè€ØÑÁàì(€€€€€€€€€€€Á…‘‘¥¹œè€ÄÁÁà€ØÙÁà€ÄÁÁà€ÄáÁàì(€€€€€€€ô((€€€€€€€€™}}±½Í”ì(€€€€€€€€€€€Ñ½Àè€ÄÁÁàì(€€€€€€€€€€€É¥¡Ðè€ÄÁÁàì(€€€€€€€€€€€Ý¥‘Ñ è€ÐÉÁàì(€€€€€€€€€€€¡•¥¡Ðè€ÐÉÁàì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÈåÁàì(€€€€€€€€€€€±¥¹”µ¡•¥¡Ðè€ÌÙÁàì(€€€€€€€ô((€€€€€€€€™}}Í•ÑÑ¥¹Ìµ‰ÕÑÑ½¸ì(€€€€€€€€€€€Ñ½Àè€ÄÁÁàì(€€€€€€€€€€€É¥¡Ðè€ØÁÁàì(€€€€€€€€€€€Ý¥‘Ñ è€ÐÉÁàì(€€€€€€€€€€€¡•¥¡Ðè€ÐÉÁàì(€€€€€€€€€€€™½¹ÐµÍ¥é”è€ÈÑÁàì(€€€€€€€€€€€±¥¹”µ¡•¥¡Ðè€ÌáÁàì(€€€€€€€ô((€€€€€€€€™}}Í•ÑÑ¥¹Ìì(€€€€€€€€€€€Ñ½Àè€ØÉÁàì(€€€€€€€€€€€É¥¡Ðè€áÁàì(€€€€€€€€€€€‰½ÑÑ½´è€ØáÁàì(€€€€€€€€€€€Ý¥‘Ñ è…±Œ ÄÀÁÙÜ€´€ÄÙÁà¤ì(€€€€€€€€€€€Á…‘‘¥¹œè€ÄÕÁàì(€€€€€€€ô((€€€€€€€€™}}½¹Ñ•¹Ðì(€€€€€€€€€€€Ý¥‘Ñ è€àáÙÜì(€€€€€€€ô((€€€€€€€€™}}½¹ÑÉ½±Ìì(€€€€€€€€€€€µ¥¸µ¡•¥¡Ðè€ØáÁàì(€€€€€€€ô(€€€ô)ô(ð½ÍÑå±”ø
