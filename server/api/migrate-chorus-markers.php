@@ -122,6 +122,15 @@ if (in_array('--self-test', $arguments, true)) {
             exit(1);
         }
     }
+    $body = slides_to_legacy_body([[
+        'text' => "Gelbejo mane\nGelbejo tave",
+        'isChorus' => true,
+        'chorusAfter' => false,
+    ]]);
+    if ($body !== '<span class="priegiesmis">Priegiesmis:</span><br>Gelbejo mane<br>Gelbejo tave') {
+        fwrite(STDERR, "Self-test failed for normal-view chorus label\n");
+        exit(1);
+    }
     echo "Self-test OK\n";
     exit;
 }
@@ -156,22 +165,25 @@ foreach ($rows as $row) {
     }
     $canMapBodyMarkers = count($bodyBlocks) === count($slides);
 
-    $songChanged = false;
+    $slidesChanged = false;
     $updatedSlides = [];
     foreach ($slides as $index => $slide) {
         $cleaned = remove_chorus_marker((string) $slide['text']);
         $found = $cleaned['found'] || ($canMapBodyMarkers && ($bodyMarkers[$index] ?? false));
+        $wasChorus = ($slide['isChorus'] ?? false) === true;
 
         if ($found) {
-            $songChanged = true;
             $markedSlides++;
+        }
+        if ($cleaned['found'] || ($found && !$wasChorus)) {
+            $slidesChanged = true;
         }
 
         if ($cleaned['text'] === '') {
             continue;
         }
 
-        $isChorus = ($slide['isChorus'] ?? false) === true || $found;
+        $isChorus = $wasChorus || $found;
         $updatedSlides[] = [
             'text' => $cleaned['text'],
             'isChorus' => $isChorus,
@@ -179,7 +191,15 @@ foreach ($rows as $row) {
         ];
     }
 
-    if (!$songChanged || $updatedSlides === []) {
+    if ($updatedSlides === []) {
+        continue;
+    }
+
+    $expectedBody = slides_to_legacy_body($updatedSlides);
+    $hasChorus = in_array(true, array_column($updatedSlides, 'isChorus'), true);
+    $bodyChanged = $hasChorus && (string) ($row['body'] ?? '') !== $expectedBody;
+
+    if (!$slidesChanged && !$bodyChanged) {
         continue;
     }
 
@@ -189,7 +209,7 @@ foreach ($rows as $row) {
             $updatedSlides,
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
         ),
-        'body' => slides_to_legacy_body($updatedSlides),
+        'body' => $expectedBody,
     ];
 }
 
