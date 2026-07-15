@@ -1,6 +1,6 @@
-KIEKVIENAS AUDIO APLANKAS = KATEGORIJA
+EVERY DIRECT AUDIO FOLDER IS A RECORDING CATEGORY
 
-Pavyzdys:
+Example:
 
 files/audio/
   piano/
@@ -12,13 +12,14 @@ files/audio/
     1.mp3
     3.mp3
 
-Taisyklės:
-- Aplanko vardas yra techninis kategorijos vardas.
-- MP3 failo vardas turi tiksliai sutapti su giesmės songId duomenų bazėje.
-- Kategorijos ikona: icon.svg, icon.png, icon.webp, icon.jpg arba icon.jpeg.
-- Jei icon.* nėra, panaudojamas pirmas paveikslėlis kategorijos aplanko šaknyje.
-- details.json nebereikalingas.
-- Indeksas automatiškai atnaujinamas atidarant /api/public/tracks.json,
-  administravimo giesmes ar įrašų tipus.
-- Rankinis atnaujinimas: iš server/ aplanko paleiskite
+Rules:
+- The folder name is the category's technical name.
+- The MP3 filename without its extension must exactly match the songId stored
+  in the database.
+- Use icon.svg, icon.png, icon.webp, icon.jpg, or icon.jpeg for the category icon.
+- If icon.* is absent, the first supported image in the category root is used.
+- details.json and tracks.json are no longer required.
+- The index refreshes when /api/public/tracks.json is requested and when an
+  administrator opens the song or recording-category pages.
+- Manual refresh from the server/ directory:
     php api/sync-audio.php

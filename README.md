@@ -1,107 +1,184 @@
-# Edeno Aidai – giesmynas (viskas viename serveryje)
+# Edeno Aidai hymnbook
 
-Vue 3 programėlė + PHP API + MySQL duomenų bazė. Viskas veikia viename
-Virtualmin domene – Node.js serveryje **nereikalingas**.
+Edeno Aidai is a Vue 3 web application with a PHP API and a MySQL/MariaDB
+database. The production application runs from one Nginx virtual host. Node.js
+is needed only to build the frontend; it is not required on the server.
 
-## Struktūra
+## Project structure
 
-- `server/` – **paruošta įkelti į public_html** (frontend jau sukompiliuotas,
-  PHP API aplanke `api/`, failai aplanke `files/`)
-- `frontend/` – Vue kodas (reikalingas tik norint keisti programėlę)
-- `db/schema.sql` – duomenų bazės struktūra
+- `server/` contains the deployable application. Upload its contents to the
+  website document root.
+- `frontend/` contains the Vue source code.
+- `db/schema.sql` contains the database schema.
+- `deploy/nginx-site.conf.example` contains the Nginx virtual-host template.
 
-## Serverio reikalavimai
+## Server requirements
 
-- Apache su `mod_rewrite` (Virtualmin standartas)
-- PHP 8.1+ (tinka 8.4) su plėtiniais: `pdo_mysql`, `mbstring`, `fileinfo`
-  – Ubuntu: `apt install php8.4-mysql php8.4-mbstring`
-- MySQL arba MariaDB (Virtualmin turi)
-- HTTPS (Virtualmin → Let's Encrypt – vienas mygtukas). **Būtina** – kitaip
-  administratoriaus slaptažodis keliautų nešifruotas.
-- PHP įkėlimo limitai ≥ 64M (pridėtas `.user.ini` juos nustato; patikrinkite
-  Virtualmin → Web Configuration → PHP-FPM Configuration, jei neveiktų)
+- Nginx
+- PHP 8.1 or newer with PHP-FPM and the `pdo_mysql`, `mbstring`, and `fileinfo`
+  extensions
+- MySQL or MariaDB
+- HTTPS
+- A 64 MB or larger request/upload limit for audio files
 
-## Diegimas (Virtualmin)
+On Ubuntu with PHP 8.4, the required extensions can be installed with:
 
-1. **Domenas.** Sukurkite / pasirinkite virtualų serverį (pvz.
-   giesmynas.adventistai.lt) ir įjunkite SSL sertifikatą (Let's Encrypt).
+```bash
+sudo apt install php8.4-fpm php8.4-mysql php8.4-mbstring
+```
 
-2. **Duomenų bazė.** Virtualmin → Edit Databases → sukurkite MySQL duomenų
-   bazę ir naudotoją (užsirašykite pavadinimą, naudotoją, slaptažodį).
+## Nginx deployment
 
-3. **Struktūros importas.** Importuokite `db/schema.sql`:
-   - per Webmin → Servers → MySQL Database Server → pasirinkite bazę →
-     Execute SQL → Run SQL from file, arba
-   - per SSH: `mysql --default-character-set=utf8mb4 -u NAUDOTOJAS -p BAZĖ < db/schema.sql`
+1. Create the domain and database in Virtualmin. Enable a Let's Encrypt
+   certificate before accepting administrator logins.
 
-4. **Failų įkėlimas.** Įkelkite **viso `server/` aplanko turinį** į
-   `public_html` (Virtualmin File Manager arba SFTP). Failas `.htaccess`
-   ir `.user.ini` turi atsidurti pačiame `public_html`.
+2. Import the schema into the new database:
 
-5. **Konfigūracija.** `public_html/api/` aplanke nukopijuokite
-   `config.example.php` į `config.php` ir įrašykite duomenų bazės duomenis.
+   ```bash
+   mysql --default-character-set=utf8mb4 -u DATABASE_USER -p DATABASE_NAME < db/schema.sql
+   ```
 
-6. **Administratoriaus slaptažodis.** Per SSH (arba Webmin → Others →
-   Command Shell):
+3. Upload the contents of `server/` to the domain's document root, usually:
 
-       cd ~/public_html/api
-       php hash-password.php 'JūsųIlgasSlaptažodis'
+   ```text
+   /home/DOMAIN_USER/public_html
+   ```
 
-   Gautą eilutę įklijuokite į `config.php` (`admin_password_hash`).
-   Slaptažodis saugomas tik kaip maiša – ne tekstu.
+4. Copy `server/api/config.example.php` to `server/api/config.php` locally, or
+   create `public_html/api/config.php` on the server. Set the database name,
+   user, password, and directories. Never commit `config.php`.
 
-7. **Patikrinimas.** Atidarykite svetainę – turi rodyti dvi PAVYZDYS
-   giesmes. `https://jūsų-domenas/admin` – prisijunkite.
+5. Generate the administrator password hash:
 
-## Tikrų duomenų perkėlimas
+   ```bash
+   cd /home/DOMAIN_USER/public_html/api
+   php hash-password.php 'Use-A-Long-Unique-Password'
+   ```
 
-Administravime → **Duomenų bazė**:
+   Copy the generated hash into `config.php` as `admin_password_hash`. The
+   application stores the hash, not the plain password.
 
-1. Įkelkite **db.json** (giesmės),
-2. tada **tracks.json** (įrašų tipai ir priskyrimai).
+6. Copy `deploy/nginx-site.conf.example` to the server's Nginx configuration.
+   Replace the domain, document root, and PHP-FPM socket placeholders. If
+   Virtualmin already created a `server {}` block, merge the `location` and
+   upload-limit directives into that block instead of creating a duplicate.
 
-Eiliškumas svarbus: priskyrimai galioja tik jau esančioms giesmėms.
-Prieš kiekvieną importą sena versija automatiškai išsaugoma
-`storage/backups/`.
+7. Validate and reload Nginx:
 
-Alternatyva per SSH: `php api/import-cli.php db.json tracks.json`
+   ```bash
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
 
-**Audio ir natų failai.** Nukopijuokite esamus failus į:
-- `public_html/files/audio/<tipas>/<nr>.mp3`
-- `public_html/files/notes/svg/<nr>_<psl>.svg` ir `notes/jpg/...`
+8. Ensure Nginx/PHP-FPM can write to these directories:
 
-Arba, jei failai lieka sename adrese (adventistai.lt/giesmes), programėlę
-sukompiliuokite su `VITE_AUDIO_BASE` ir `VITE_NOTES_BASE` (žr. `.env.example`)
-ir įkelkite iš naujo.
+   ```text
+   public_html/files/audio/
+   public_html/files/notes/
+   public_html/files/icons/
+   public_html/storage/
+   ```
 
-## Programėlės atnaujinimas (kai pakeičiate kodą)
+9. Test the home page, `/admin`, `/api`, `/api/public/db.json`,
+   `/api/public/tracks.json`, and `/manifest.json` over HTTPS.
 
-Kompiuteryje (reikia Node.js 20+):
+The Nginx configuration is required. Nginx does not read `.htaccess` files.
+The supplied template provides the PHP API front controller, Vue Router SPA
+fallback, private storage protection, PHP source protection, upload limits,
+and cache headers.
 
-    cd frontend
-    npm install        # tik pirmą kartą
-    npm run release    # sukompiliuoja ir sudeda į server/
+## Importing songs
 
-Tada įkelkite pasikeitusius failus iš `server/` į `public_html`
-(`index.html`, `sw.js` ir `assets/` aplanką). `api/`, `files/` ir
-`storage/` liesti nereikia.
+Open `Admin -> Database` and import the old `db.json` song database. The old
+`details.json`/`tracks.json` import is no longer needed: recording categories
+and song assignments are indexed from the audio folder structure.
 
-Vietinis kūrimas: `npm run dev` (užklausas `/api` ir `/files` nukreipia pagal
-`VITE_PROXY_TARGET` – į vietinį `php -S localhost:8000 router.php` arba
-tiesiai į jūsų svetainę).
+Database backups created before imports are stored under `server/storage/backups/`.
 
-## Saugumas
+## Audio categories and files
 
-- Slaptažodis saugomas bcrypt maiša, prisijungimai riboti
-  (20 bandymų / 15 min iš vieno IP), sesija – httpOnly slapukas, 12 val.
-- Slaptažodžio keitimas: iš naujo paleiskite `hash-password.php` ir
-  atnaujinkite `config.php`.
-- Papildoma (nebūtina): Virtualmin → Protected Directories galima uždėti
-  antrą slaptažodį ant `/admin` ar `/api`; serverį atnaujinkite
-  (`apt upgrade`) reguliariai.
+Each direct folder under `server/files/audio/` is a recording category:
 
-## Atsarginės kopijos
+```text
+server/files/audio/
+  piano/
+    icon.svg
+    1.mp3
+    27 A.mp3
+  piano&violin/
+    icon.png
+    1.mp3
+```
 
-- Duomenų bazė: Virtualmin → Backup Virtual Servers (arba `mysqldump`).
-- Failai: `public_html/files/` aplankas.
-- Prieš kiekvieną importą automatinė JSON kopija: `storage/backups/`.
+The MP3 filename without its extension must exactly match the song's `songId`.
+The preferred category icon is `icon.svg`, `icon.png`, `icon.webp`, `icon.jpg`,
+or `icon.jpeg`. If `icon.*` is absent, the indexer uses the first supported
+image in the category folder.
+
+Run a manual index refresh from the deployed `server/` directory with:
+
+```bash
+php api/sync-audio.php
+```
+
+The index also refreshes when the application requests recording types or when
+an administrator opens the song/recording-type pages.
+
+## Sheet-music files
+
+Store sheet music under:
+
+```text
+server/files/notes/jpg/<songId>.jpg
+server/files/notes/jpg/<songId>_1.jpg
+server/files/notes/svg/<songId>.svg
+server/files/notes/svg/<songId>_1.svg
+```
+
+The first page has no suffix. Additional pages use `_1`, `_2`, and so on.
+
+## Local development
+
+Start the PHP development server from one terminal:
+
+```powershell
+cd server
+php -S 127.0.0.1:8000 router.php
+```
+
+Set `VITE_PROXY_TARGET=http://127.0.0.1:8000` in `frontend/.env`, then start
+Vite in another terminal:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`. Do not use the VS Code Live Server extension;
+it does not run the PHP API or provide the required SPA/API routing.
+
+## Building a release
+
+Node.js 20.19 or newer is required on the development computer:
+
+```powershell
+cd frontend
+npm ci
+npm run release
+```
+
+The release command builds the frontend and synchronizes it into `server/`.
+Upload the changed `server/` contents to the Nginx document root. Preserve the
+server's `api/config.php`, `files/`, and `storage/` data.
+
+## Security and backups
+
+- Keep `server/api/config.php` outside Git and restrict its filesystem access.
+- Use HTTPS for all administrator access.
+- The administrator session uses an HTTP-only cookie and login attempts are
+  rate-limited.
+- Back up the MySQL database with Virtualmin or `mysqldump`.
+- Back up `public_html/files/` separately; media is intentionally excluded from
+  this Git repository.
+- Keep the operating system, Nginx, PHP-FPM, and database server updated.

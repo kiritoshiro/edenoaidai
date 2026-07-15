@@ -1,16 +1,25 @@
-# Folder audio index pakeitimas
+# Folder-based audio index upgrade
 
-## Kas pasikeitė
+## What changed
 
-- `details.json` nebenaudojamas kaip audio kategorijų šaltinis.
-- Kiekvienas `server/files/audio/<kategorija>/` aplankas automatiškai įrašomas į MySQL.
-- Kiekvienas `<songId>.mp3` automatiškai sukuria `song_tracks` priskyrimą.
-- Ikona automatiškai randama kategorijos aplanke (`icon.svg/png/webp/jpg/jpeg`).
-- Giesmių numeriai su tarpais, pvz. `27 A`, dabar palaikomi PHP validacijoje.
-- Pridėta CLI komanda `php server/api/sync-audio.php`.
+- `details.json` is no longer the source of recording categories.
+- Every direct `server/files/audio/<category>/` folder is indexed in MySQL.
+- Every `<songId>.mp3` file creates the matching `song_tracks` assignment.
+- The category icon is detected from `icon.svg`, `icon.png`, `icon.webp`,
+  `icon.jpg`, or `icon.jpeg` in the category folder.
+- Song IDs containing spaces, such as `27 A`, are supported.
+- The index can be refreshed manually with `php server/api/sync-audio.php`.
 
-## Ko nebereikia
+## What is no longer required
 
-- Importuoti `details.json`.
-- Rankiniu būdu pažymėti audio kategorijas prie giesmės.
-- Laikyti kategorijų ikonų atskirame `files/icons` aplanke (senas formatas dar palaikomas frontend pusėje).
+- Importing `details.json` or `tracks.json`.
+- Manually assigning recording categories to each song.
+- Keeping category icons in `files/icons/`. The frontend still supports the
+  legacy icon location for backward compatibility.
+
+## Nginx migration
+
+The project now targets Nginx with PHP-FPM. Apache `.htaccess` files were
+removed because Nginx ignores them. Install `deploy/nginx-site.conf.example`
+or merge its directives into the Virtualmin-generated Nginx virtual host before
+deploying the application.

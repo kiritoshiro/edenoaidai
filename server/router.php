@@ -1,6 +1,6 @@
 <?php
 
-// Tik vietiniam kūrimui: php -S localhost:8000 router.php (iš server/ aplanko)
+// Local development only: run `php -S localhost:8000 router.php` from server/.
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/';
 
@@ -11,7 +11,7 @@ if (preg_match('#^/api(/|$)#', $path)) {
 
 $file = __DIR__ . $path;
 if ($path !== '/' && is_file($file)) {
-    return false; // statinius failus atiduoda pats serveris
+    return false; // Let PHP's development server return existing static files.
 }
 
 $index = __DIR__ . '/index.html';
@@ -21,4 +21,4 @@ if (is_file($index)) {
 }
 
 http_response_code(404);
-echo 'index.html dar nesukurtas - paleiskite "npm run release" frontend aplanke';
+echo 'index.html has not been built; run "npm run release" in the frontend directory';
