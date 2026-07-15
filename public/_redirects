@@ -1,8 +1,0 @@
-# Redirect default Netlify subdomain to primary domain
-https://edeno-aidai.netlify.com/* https://giesmynas.adventistai.lt/:splat 301!
-
-# Proxy new service worker to legacy address
-/sw.js*    /service-worker.js:splat   200!
-
-# Netlify settings for single-page application
-/*    /index.html   200

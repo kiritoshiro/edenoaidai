@@ -1,6 +1,0 @@
-# HTTP/2 Server Push for all URLs
-/
-  Link: </css/app.css>; rel=preload; as=style
-  Link: </js/app.js>; rel=preload; as=script
-  Link: </js/chunk-vendors.js>; rel=preload; as=script
-  Link: </js/service-worker.js>; rel=preload; as=script
