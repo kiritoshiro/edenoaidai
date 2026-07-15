@@ -99,14 +99,14 @@ Database backups created before imports are stored under `server/storage/backups
 
 The song editor stores lyrics as separate columns/slides. Mark a column as a
 chorus with the `Priegiesmis` checkbox. When a song has a chorus, it is inserted
-after every ordinary column by default. Clear `Rodyti priegiesmÄ¯ po Å¡io
+after every ordinary column by default. Clear `Rodyti priegiesmį po šio
 stulpelio` on an individual column when the chorus must not follow it.
 
 Existing songs remain compatible. The editor converts legacy lyrics into
 columns by treating each blank-line-separated block as one column. Saving the
 song stores both the structured slide data and the legacy `body` representation.
 
-The public song page has a `SkaidrÄ—s` button that opens the lyrics in fullscreen
+The public song page has a `Skaidrės` button that opens the lyrics in fullscreen
 mode. Use the left/right half of the screen, the on-screen arrow buttons, or the
 keyboard:
 
