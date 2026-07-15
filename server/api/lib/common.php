@@ -35,12 +35,30 @@ function pdo(): PDO
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
             ]);
+            ensure_schema($pdo);
         } catch (PDOException $e) {
             error_log('[edeno-aidai] DB: ' . $e->getMessage());
             fail(500, 'Nepavyko prisijungti prie duomenų bazės (patikrinkite config.php)');
         }
     }
     return $pdo;
+}
+
+function ensure_schema(PDO $db): void
+{
+    static $ready = false;
+    if ($ready) {
+        return;
+    }
+
+    $table = $db->query("SHOW TABLES LIKE 'songs'")->fetchColumn();
+    if ($table !== false) {
+        $column = $db->query("SHOW COLUMNS FROM songs LIKE 'slides_json'")->fetchColumn();
+        if ($column === false) {
+            $db->exec('ALTER TABLE songs ADD COLUMN slides_json MEDIUMTEXT NULL AFTER body');
+        }
+    }
+    $ready = true;
 }
 
 function files_dir(): string
@@ -266,6 +284,40 @@ function clear_login_failures(string $ip): void
 
 // ─── Giesmių forma (DB eilutė <-> API) ───────────────────────────────
 
+function normalize_song_slides(mixed $value): array
+{
+    if (!is_array($value) || !array_is_list($value)) {
+        return [];
+    }
+
+    $slides = [];
+    foreach (array_slice($value, 0, 100) as $entry) {
+        if (!is_array($entry) || !is_string($entry['text'] ?? null)) {
+            continue;
+        }
+        $text = trim($entry['text']);
+        if ($text === '') {
+            continue;
+        }
+        $isChorus = (bool) ($entry['isChorus'] ?? false);
+        $slides[] = [
+            'text' => mb_substr($text, 0, 20000),
+            'isChorus' => $isChorus,
+            'chorusAfter' => !$isChorus && ($entry['chorusAfter'] ?? true) !== false,
+        ];
+    }
+    return $slides;
+}
+
+function decode_song_slides(mixed $value): array
+{
+    if (!is_string($value) || trim($value) === '') {
+        return [];
+    }
+    $decoded = json_decode($value, true);
+    return normalize_song_slides($decoded);
+}
+
 function song_to_api(array $row, ?array $lists = null): array
 {
     $notePages = note_pages_for_song((string) $row['song_id']);
@@ -274,6 +326,7 @@ function song_to_api(array $row, ?array $lists = null): array
         'title' => $row['title'],
         'verse' => $row['verse'] ?? '',
         'body' => $row['body'] ?? '',
+        'slides' => decode_song_slides($row['slides_json'] ?? null),
         'copyright' => $row['copyright'] ?? '',
         'notePages' => $notePages,
     ];
@@ -307,6 +360,12 @@ function sanitize_song(array $input): array
         if (isset($input[$field]) && is_string($input[$field])) {
             $song[$field] = $input[$field];
         }
+    }
+    if (array_key_exists('slides', $input)) {
+        $song['slides_json'] = json_encode(
+            normalize_song_slides($input['slides']),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        );
     }
     return $song;
 }

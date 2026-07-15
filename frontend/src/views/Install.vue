@@ -121,7 +121,16 @@ export default {
             this.current = 0;
 
             const rows = songs.map(song => {
-                const { songId, title, verse, body, copyright, pages, notePages } = song;
+                const {
+                    songId,
+                    title,
+                    verse,
+                    body,
+                    slides,
+                    copyright,
+                    pages,
+                    notePages,
+                } = song;
                 const lists = trackLists
                     .filter(
                         type =>
@@ -135,6 +144,7 @@ export default {
                     title,
                     verse,
                     body,
+                    slides: Array.isArray(slides) ? slides : [],
                     copyright,
                     pages: pages || null,
                     notePages: notePages || null,

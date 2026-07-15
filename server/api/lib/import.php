@@ -29,7 +29,13 @@ function validate_songs_json(mixed $parsed): array
 
         $row = sanitize_song($entry);
         $row['song_id'] = $songId;
-        $row += ['title' => '', 'verse' => '', 'body' => '', 'copyright' => ''];
+        $row += [
+            'title' => '',
+            'verse' => '',
+            'body' => '',
+            'slides_json' => '[]',
+            'copyright' => '',
+        ];
         $rows[] = $row;
     }
     return $rows;
@@ -70,11 +76,11 @@ function import_songs(PDO $db, array $rows): int
     $db->beginTransaction();
     try {
         $upsert = $db->prepare(
-            'INSERT INTO songs (song_id, title, verse, body, copyright)
-             VALUES (:song_id, :title, :verse, :body, :copyright)
+            'INSERT INTO songs (song_id, title, verse, body, slides_json, copyright)
+             VALUES (:song_id, :title, :verse, :body, :slides_json, :copyright)
              ON DUPLICATE KEY UPDATE
                  title = :u_title, verse = :u_verse, body = :u_body,
-                 copyright = :u_copyright',
+                 slides_json = :u_slides_json, copyright = :u_copyright',
         );
         $ids = [];
         foreach ($rows as $row) {
@@ -83,10 +89,12 @@ function import_songs(PDO $db, array $rows): int
                 ':title' => $row['title'],
                 ':verse' => $row['verse'],
                 ':body' => $row['body'],
+                ':slides_json' => $row['slides_json'],
                 ':copyright' => $row['copyright'],
                 ':u_title' => $row['title'],
                 ':u_verse' => $row['verse'],
                 ':u_body' => $row['body'],
+                ':u_slides_json' => $row['slides_json'],
                 ':u_copyright' => $row['copyright'],
             ]);
             $ids[] = $row['song_id'];

@@ -167,13 +167,14 @@ if ($first === 'songs') {
         }
         try {
             $db->prepare(
-                'INSERT INTO songs (song_id, title, verse, body, copyright)
-                 VALUES (?, ?, ?, ?, ?)',
+                'INSERT INTO songs (song_id, title, verse, body, slides_json, copyright)
+                 VALUES (?, ?, ?, ?, ?, ?)',
             )->execute([
                 $song['song_id'],
                 $song['title'],
                 $song['verse'] ?? '',
                 $song['body'] ?? '',
+                $song['slides_json'] ?? '[]',
                 $song['copyright'] ?? '',
             ]);
         } catch (PDOException $e) {
@@ -187,6 +188,7 @@ if ($first === 'songs') {
             'title' => $song['title'],
             'verse' => $song['verse'] ?? '',
             'body' => $song['body'] ?? '',
+            'slides_json' => $song['slides_json'] ?? '[]',
             'copyright' => $song['copyright'] ?? '',
         ]), 201);
     }

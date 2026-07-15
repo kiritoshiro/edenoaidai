@@ -95,6 +95,34 @@ and song assignments are indexed from the audio folder structure.
 
 Database backups created before imports are stored under `server/storage/backups/`.
 
+## Lyrics columns and fullscreen slides
+
+The song editor stores lyrics as separate columns/slides. Mark a column as a
+chorus with the `Priedainis` checkbox. When a song has a chorus, it is inserted
+after every ordinary column by default. Clear `Rodyti priedainį po šio
+stulpelio` on an individual column when the chorus must not follow it.
+
+Existing songs remain compatible. The editor converts legacy lyrics into
+columns by treating each blank-line-separated block as one column. Saving the
+song stores both the structured slide data and the legacy `body` representation.
+
+The public song page has a `Skaidrės` button that opens the lyrics in fullscreen
+mode. Use the left/right half of the screen, the on-screen arrow buttons, or the
+keyboard:
+
+- `Left Arrow` / `Page Up` - previous slide
+- `Right Arrow` / `Page Down` / `Space` - next slide
+- `Home` / `End` - first or last slide
+- `Esc` - close the slideshow
+
+The application automatically adds the `slides_json` column to an existing
+`songs` table. If the production database user is not allowed to alter tables,
+run this once with a privileged database account before deploying the new code:
+
+```sql
+ALTER TABLE songs ADD COLUMN slides_json MEDIUMTEXT NULL AFTER body;
+```
+
 ## Audio categories and files
 
 Each direct folder under `server/files/audio/` is a recording category:

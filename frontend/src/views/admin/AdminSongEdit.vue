@@ -32,10 +32,85 @@
                 <span>Posmelis / eilutė (verse)</span>
                 <input v-model="song.verse" class="adm-input" />
             </label>
-            <label class="adm-field">
-                <span>Tekstas (Enter – nauja eilutė)</span>
-                <textarea v-model="song.body" rows="14"></textarea>
-            </label>
+            <section class="lyrics-editor">
+                <div class="lyrics-editor__header">
+                    <div>
+                        <h3>Teksto stulpeliai / skaidrės</h3>
+                        <p class="adm-file-note">
+                            Kiekvienas stulpelis skaidrių režime rodomas atskirai.
+                            Priedainio stulpeliai pagal nutylėjimą kartojami po
+                            kiekvieno paprasto stulpelio.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="adm-button adm-button--ghost"
+                        @click="addSlide"
+                    >
+                        + Pridėti stulpelį
+                    </button>
+                </div>
+
+                <article
+                    v-for="(slide, index) in song.slides"
+                    :key="slide.key"
+                    class="lyrics-slide"
+                    :class="{ 'lyrics-slide--chorus': slide.isChorus }"
+                >
+                    <div class="lyrics-slide__toolbar">
+                        <strong>{{ slideLabel(slide, index) }}</strong>
+                        <div>
+                            <button
+                                type="button"
+                                class="adm-button adm-button--ghost lyrics-slide__move"
+                                :disabled="index === 0"
+                                title="Perkelti aukštyn"
+                                @click="moveSlide(index, -1)"
+                            >
+                                ↑
+                            </button>
+                            <button
+                                type="button"
+                                class="adm-button adm-button--ghost lyrics-slide__move"
+                                :disabled="index === song.slides.length - 1"
+                                title="Perkelti žemyn"
+                                @click="moveSlide(index, 1)"
+                            >
+                                ↓
+                            </button>
+                            <button
+                                type="button"
+                                class="adm-button adm-button--danger"
+                                :disabled="song.slides.length === 1"
+                                @click="removeSlide(index)"
+                            >
+                                Šalinti
+                            </button>
+                        </div>
+                    </div>
+
+                    <textarea
+                        v-model="slide.text"
+                        rows="6"
+                        placeholder="Įrašykite šio stulpelio žodžius…"
+                    ></textarea>
+
+                    <div class="lyrics-slide__options">
+                        <label>
+                            <input
+                                v-model="slide.isChorus"
+                                type="checkbox"
+                                @change="onSlideTypeChange(slide)"
+                            />
+                            Priedainis
+                        </label>
+                        <label v-if="!slide.isChorus && hasChorus">
+                            <input v-model="slide.chorusAfter" type="checkbox" />
+                            Rodyti priedainį po šio stulpelio
+                        </label>
+                    </div>
+                </article>
+            </section>
             <label class="adm-field">
                 <span>Autorystė (copyright)</span>
                 <input v-model="song.copyright" class="adm-input" />
@@ -183,6 +258,33 @@ function newlinesToBr(value) {
         .replace(/\n/g, '<br>');
 }
 
+let nextSlideKey = 1;
+
+function createSlide(values = {}) {
+    return {
+        key: nextSlideKey++,
+        text: brToNewlines(values.text || ''),
+        isChorus: values.isChorus === true,
+        chorusAfter: values.isChorus === true
+            ? false
+            : values.chorusAfter !== false,
+    };
+}
+
+function slidesFromSong(song) {
+    if (Array.isArray(song.slides) && song.slides.length > 0) {
+        return song.slides.map(createSlide);
+    }
+
+    const blocks = brToNewlines(song.body)
+        .split(/\n\s*\n+/)
+        .map(text => text.trim())
+        .filter(Boolean);
+    return blocks.length > 0
+        ? blocks.map(text => createSlide({ text }))
+        : [createSlide()];
+}
+
 export default {
     name: 'AdminSongEdit',
     props: {
@@ -206,6 +308,9 @@ export default {
         isNew() {
             return this.$route.name === 'admin-song-new';
         },
+        hasChorus() {
+            return this.song?.slides?.some(slide => slide.isChorus) === true;
+        },
     },
     watch: {
         // Covers navigating between songs and the new → edit transition
@@ -226,6 +331,7 @@ export default {
                     title: '',
                     verse: '',
                     body: '',
+                    slides: [createSlide()],
                     copyright: '',
                     lists: [],
                 };
@@ -238,6 +344,28 @@ export default {
         }
     },
     methods: {
+        addSlide() {
+            this.song.slides.push(createSlide());
+        },
+        removeSlide(index) {
+            if (this.song.slides.length > 1) {
+                this.song.slides.splice(index, 1);
+            }
+        },
+        moveSlide(index, direction) {
+            const target = index + direction;
+            if (target < 0 || target >= this.song.slides.length) return;
+            const [slide] = this.song.slides.splice(index, 1);
+            this.song.slides.splice(target, 0, slide);
+        },
+        onSlideTypeChange(slide) {
+            slide.chorusAfter = slide.isChorus ? false : true;
+        },
+        slideLabel(slide, index) {
+            return slide.isChorus
+                ? `Priedainis (${index + 1})`
+                : `Stulpelis ${index + 1}`;
+        },
         flash(message) {
             this.message = message;
             this.error = '';
@@ -254,6 +382,7 @@ export default {
                     : song.title || '',
                 verse: song.verse || '',
                 body: brToNewlines(song.body),
+                slides: slidesFromSong(song),
                 copyright: song.copyright || '',
                 lists: Array.isArray(song.lists) ? [...song.lists] : [],
             };
@@ -270,10 +399,24 @@ export default {
             this.busy = true;
             this.error = '';
             try {
-                const { lists, ...editableSong } = this.song;
+                const slides = this.song.slides
+                    .map(({ text, isChorus, chorusAfter }) => ({
+                        text: String(text || '').trim(),
+                        isChorus: isChorus === true,
+                        chorusAfter: isChorus === true ? false : chorusAfter !== false,
+                    }))
+                    .filter(slide => slide.text !== '');
+                if (slides.length === 0) {
+                    throw new Error('Pridėkite bent vieną netuščią teksto stulpelį.');
+                }
+
+                const editableSong = { ...this.song };
+                delete editableSong.lists;
+                delete editableSong.slides;
                 const payload = {
                     ...editableSong,
-                    body: newlinesToBr(this.song.body),
+                    body: newlinesToBr(slides.map(slide => slide.text).join('\n\n')),
+                    slides,
                 };
                 if (this.isNew) {
                     await api.createSong(payload);
@@ -357,3 +500,77 @@ export default {
     },
 };
 </script>
+
+<style lang="scss">
+.lyrics-editor {
+    margin: 22px 0;
+
+    &__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 14px;
+
+        h3 {
+            margin: 0 0 5px;
+        }
+    }
+}
+
+.lyrics-slide {
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid #d9d9d9;
+    border-left: 5px solid #b5b5b5;
+    border-radius: 8px;
+    background: #fff;
+
+    &--chorus {
+        border-left-color: #d9b26f;
+        background: #fffaf0;
+    }
+
+    textarea {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 10px;
+    }
+
+    &__toolbar,
+    &__options {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    &__move {
+        min-width: 38px;
+        margin-right: 5px;
+        font-size: 18px;
+    }
+
+    &__options {
+        justify-content: flex-start;
+        margin-top: 10px;
+
+        label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            background: #f2f2f2;
+            cursor: pointer;
+        }
+    }
+}
+
+@media (max-width: 640px) {
+    .lyrics-editor__header {
+        flex-direction: column;
+    }
+}
+</style>
