@@ -99,14 +99,14 @@ Database backups created before imports are stored under `server/storage/backups
 
 The song editor stores lyrics as separate columns/slides. Mark a column as a
 chorus with the `Priegiesmis` checkbox. When a song has a chorus, it is inserted
-after every ordinary column by default. Clear `Rodyti priegiesmį po šio
+after every ordinary column by default. Clear `Rodyti priegiesmÄ¯ po Å¡io
 stulpelio` on an individual column when the chorus must not follow it.
 
 Existing songs remain compatible. The editor converts legacy lyrics into
 columns by treating each blank-line-separated block as one column. Saving the
 song stores both the structured slide data and the legacy `body` representation.
 
-The public song page has a `Skaidrės` button that opens the lyrics in fullscreen
+The public song page has a `SkaidrÄ—s` button that opens the lyrics in fullscreen
 mode. Use the left/right half of the screen, the on-screen arrow buttons, or the
 keyboard:
 
@@ -130,6 +130,27 @@ run this once with a privileged database account before deploying the new code:
 ```sql
 ALTER TABLE songs ADD COLUMN slides_json MEDIUMTEXT NULL AFTER body;
 ```
+
+### One-time legacy chorus migration
+
+After upgrading an existing song database, preview the migration that finds a
+standalone `Priegiesmis` label in each lyrics column, marks that column as a
+chorus, and removes the label from the displayed lyrics:
+
+```bash
+cd /home/giesmynas2/public_html
+sudo -u giesmynas2 php8.4 api/migrate-chorus-markers.php
+```
+
+If the previewed song count looks correct, apply it once:
+
+```bash
+sudo -u giesmynas2 php8.4 api/migrate-chorus-markers.php --apply
+```
+
+The apply command creates a database JSON backup in `storage/backups/` before
+changing any songs. It is safe to run the command again: migrated lyrics no
+longer contain the marker, so they are skipped.
 
 ## Audio categories and files
 
@@ -218,3 +239,4 @@ server's `api/config.php`, `files/`, and `storage/` data.
 - Back up `public_html/files/` separately; media is intentionally excluded from
   this Git repository.
 - Keep the operating system, Nginx, PHP-FPM, and database server updated.
+
