@@ -36,7 +36,7 @@
                     class="song__slideshow-button"
                     @click="openSlideshow"
                 >
-                    <span aria-hidden="true">▣</span>
+                    <span class="song__slideshow-icon" aria-hidden="true">▤</span>
                     <span class="song__slideshow-label">Skaidrės</span>
                 </button>
 
@@ -797,7 +797,7 @@ export default {
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
-            notesVisible: true,
+            notesVisible: localStorage.getItem('notesVisible') !== 'false',
             notesPageIndex: 0,
             notesZoom: 1,
             previousNotesBodyOverflow: '',
@@ -1003,7 +1003,6 @@ export default {
     watch: {
         songId() {
             this.closeNotesFullscreen();
-            this.notesVisible = true;
             this.resetAudioState();
             if (!this.presenterConnected) this.closeSlideshow();
             this.fetchTrackLabels();
@@ -1016,6 +1015,9 @@ export default {
                 Math.max(0, value.length - 1),
             );
             if (value.length === 0) this.closeNotesFullscreen();
+        },
+        notesVisible(value) {
+            localStorage.setItem('notesVisible', String(value));
         },
         availableNoteFormats(formats) {
             if (!formats.includes(this.imageType)) {
@@ -1109,6 +1111,29 @@ export default {
         });
         this.scheduleSlideValidation();
     },
+    beforeRouteLeave(to, from, next) {
+        if (this.notesFullscreenOpen) {
+            this.closeNotesFullscreen();
+            next(false);
+            return;
+        }
+        if (this.songGalleryOpen) {
+            this.songGalleryOpen = false;
+            next(false);
+            return;
+        }
+        if (this.slideshowSettingsOpen) {
+            this.closeSlideshowSettings();
+            next(false);
+            return;
+        }
+        if (this.slideshowOpen) {
+            this.closeSlideshow();
+            next(false);
+            return;
+        }
+        next();
+    },
     beforeUnmount() {
         document.removeEventListener('keydown', this.onSlideshowKeydown);
         document.removeEventListener('fullscreenchange', this.onFullscreenChange);
@@ -1195,6 +1220,14 @@ export default {
             this.fullscreenActive = false;
         },
         requestCloseSlideshow() {
+            if (this.songGalleryOpen) {
+                this.songGalleryOpen = false;
+                return;
+            }
+            if (this.slideshowSettingsOpen) {
+                this.closeSlideshowSettings();
+                return;
+            }
             this.closeSlideshow();
         },
         previousSlide() {
@@ -1255,7 +1288,7 @@ export default {
             if (this.slideshowSettingsOpen) {
                 if (event.key === 'Escape') {
                     event.preventDefault();
-                    this.slideshowSettingsOpen = false;
+                    this.closeSlideshowSettings();
                 }
                 return;
             }
@@ -1492,6 +1525,8 @@ export default {
 *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Avenir,Helvetica,Arial,sans-serif}body{color:#fff;background:radial-gradient(circle at 50% 45%,#263447 0,#111923 48%,#080b10 100%)}body.light{color:#17130d;background:radial-gradient(circle at 50% 45%,#fff 0,#f4efe6 58%,#e8dfd1 100%)}#stage{display:grid;grid-template-rows:76px minmax(0,1fr) 82px;width:100vw;height:100vh}#title{display:flex;align-items:center;justify-content:center;padding:12px 5vw;color:rgba(255,255,255,.72);font-size:clamp(16px,2vw,24px)}body.light #title{color:rgba(23,19,13,.68)}#area{display:grid;min-width:0;min-height:0;overflow:hidden}#content{align-self:center;justify-self:center;width:min(1200px,86vw);min-height:0;height:auto;max-height:100%;overflow:hidden;padding:30px 0;font-weight:600;line-height:1.32;text-align:center;text-wrap:balance;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 3px 16px rgba(0,0,0,.55);transform:translate(var(--offset-x),var(--offset-y));pointer-events:none}body.light #content{text-shadow:0 2px 10px rgba(75,52,20,.18)}body.no-wrap #content{white-space:pre;text-wrap:nowrap;overflow-wrap:normal}#counter{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.68);font-size:18px}body.light #counter{color:rgba(23,19,13,.68)}.zone{position:fixed;top:0;bottom:0;width:50%;border:0;background:transparent;cursor:pointer}.zone.left{left:0}.zone.right{right:0}
 </style></head><body><div id="stage"><div id="title"></div><div id="area"><div id="content"></div></div><div id="counter"></div></div><button class="zone left" aria-label="Ankstesnė skaidrė"></button><button class="zone right" aria-label="Kita skaidrė"></button></body></html>`);
             presenterWindow.document.close();
+            presenterWindow.document.getElementById('area').style.overflow = 'visible';
+            presenterWindow.document.getElementById('content').style.overflow = 'visible';
             presenterWindow.document.querySelector('.zone.left').onclick = () =>
                 this.previousSlide();
             presenterWindow.document.querySelector('.zone.right').onclick = () =>
@@ -2451,16 +2486,20 @@ export default {
         padding: 5px;
     }
 
-    .song__theme-label,
-    .song__slideshow-label {
+    .song__theme-label {
         display: none;
     }
 
     .song__slideshow-button {
-        min-width: 36px;
+        min-width: 68px;
         min-height: 38px;
-        padding: 6px;
-        font-size: 14px;
+        gap: 4px;
+        padding: 6px 7px;
+        font-size: 12px;
+    }
+
+    .song__slideshow-icon {
+        font-size: 16px;
     }
 
     .song-audio {
@@ -2709,7 +2748,7 @@ export default {
         display: grid;
         min-width: 0;
         min-height: 0;
-        overflow: hidden;
+        overflow: visible;
         pointer-events: none;
     }
 
@@ -2721,7 +2760,7 @@ export default {
         min-height: 0;
         height: auto;
         max-height: 100%;
-        overflow: hidden;
+        overflow: visible;
         padding: 30px 0;
         box-sizing: border-box;
         font-size: var(--lyrics-font-size, 56px);
@@ -3031,6 +3070,14 @@ export default {
     }
 
     &__settings-header {
+        position: sticky;
+        top: -20px;
+        z-index: 2;
+        margin: -20px -20px 0;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--lyrics-show-border);
+        background: var(--lyrics-show-panel);
+
         h2 {
             margin: 0;
             font-size: 24px;
@@ -3292,6 +3339,12 @@ export default {
             bottom: 68px;
             width: calc(100vw - 16px);
             padding: 15px;
+        }
+
+        &__settings-header {
+            top: -15px;
+            margin: -15px -15px 0;
+            padding: 13px 15px 10px;
         }
 
         &__song-gallery {

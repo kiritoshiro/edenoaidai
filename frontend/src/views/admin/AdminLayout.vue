@@ -13,6 +13,10 @@
                     Duomenų bazė
                 </router-link>
                 <a href="/" class="adm-nav__link">Giesmynas ↗</a>
+                <button class="adm-nav__theme" @click="toggleTheme">
+                    <span aria-hidden="true">{{ isDark ? '☀' : '☾' }}</span>
+                    {{ isDark ? 'Šviesi tema' : 'Tamsi tema' }}
+                </button>
                 <button class="adm-nav__logout" @click="logout">Atsijungti</button>
             </nav>
         </header>
@@ -22,10 +26,19 @@
 
 <script>
 import { api } from '../../lib/api';
+import { appTheme, toggleAppTheme } from '../../lib/theme';
 
 export default {
     name: 'AdminLayout',
+    computed: {
+        isDark() {
+            return appTheme.value === 'dark';
+        },
+    },
     methods: {
+        toggleTheme() {
+            toggleAppTheme();
+        },
         async logout() {
             try {
                 await api.logout();
@@ -41,9 +54,33 @@ export default {
 <style lang="scss">
 /* Shared admin styles (adm-*) */
 .adm {
+    --adm-text: #2f2f2f;
+    --adm-muted: rgba(0, 0, 0, 0.58);
+    --adm-border: rgba(0, 0, 0, 0.2);
+    --adm-input: #fff;
+    --adm-surface: #f5f5f5;
+    --adm-hover: #f5f5dc;
+    --adm-row-separator: #fff;
+    --adm-danger-text: #a5243d;
+    --adm-danger-soft: rgba(165, 36, 61, 0.1);
+    --adm-success-soft: rgba(120, 170, 100, 0.15);
+
     max-width: 960px;
     margin: 0 auto;
-    color: #2f2f2f;
+    color: var(--adm-text);
+}
+
+:root[data-theme='dark'] .adm {
+    --adm-text: #f3eee6;
+    --adm-muted: #b9b0a4;
+    --adm-border: rgba(255, 255, 255, 0.2);
+    --adm-input: #18212c;
+    --adm-surface: #1c2632;
+    --adm-hover: #303a47;
+    --adm-row-separator: #10161e;
+    --adm-danger-text: #ff9aad;
+    --adm-danger-soft: rgba(221, 80, 107, 0.2);
+    --adm-success-soft: rgba(113, 190, 112, 0.2);
 }
 
 .adm-header {
@@ -69,13 +106,13 @@ export default {
     gap: 6px;
 
     &__link {
-        color: #2f2f2f;
+        color: var(--adm-text);
         text-decoration: none;
         padding: 6px 12px;
         border-radius: 99px;
 
         &:hover {
-            background-color: beige;
+            background-color: var(--adm-hover);
         }
 
         &.router-link-active:not([href='/']) {
@@ -83,17 +120,26 @@ export default {
         }
     }
 
+    &__theme,
     &__logout {
         border: none;
         background: none;
         padding: 6px 12px;
         border-radius: 99px;
         cursor: pointer;
-        color: rgba(165, 36, 61, 1);
+        color: var(--adm-text);
         font-size: inherit;
 
         &:hover {
-            background-color: rgba(165, 36, 61, 0.1);
+            background-color: var(--adm-hover);
+        }
+    }
+
+    &__logout {
+        color: var(--adm-danger-text);
+
+        &:hover {
+            background-color: var(--adm-danger-soft);
         }
     }
 }
@@ -117,9 +163,10 @@ export default {
     font: inherit;
     box-sizing: border-box;
     padding: 8px 10px;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--adm-border);
     border-radius: 8px;
-    background: white;
+    color: var(--adm-text);
+    background: var(--adm-input);
 
     &:focus {
         outline: 2px solid rgba(217, 178, 111, 0.9);
@@ -143,7 +190,7 @@ export default {
     box-shadow: 2px 2px 5px 0 rgba(0, 0, 0, 0.15);
 
     &:hover:not([disabled]) {
-        background-color: beige;
+        background-color: var(--adm-hover);
     }
 
     &[disabled] {
@@ -152,18 +199,19 @@ export default {
     }
 
     &--danger {
-        background-color: white;
-        color: rgba(165, 36, 61, 1);
-        box-shadow: inset 0 0 0 1px rgba(165, 36, 61, 0.6);
+        background-color: var(--adm-input);
+        color: var(--adm-danger-text);
+        box-shadow: inset 0 0 0 1px var(--adm-danger-text);
 
         &:hover:not([disabled]) {
-            background-color: rgba(165, 36, 61, 0.08);
+            background-color: var(--adm-danger-soft);
         }
     }
 
     &--ghost {
-        background-color: white;
-        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+        color: var(--adm-text);
+        background-color: var(--adm-input);
+        box-shadow: inset 0 0 0 1px var(--adm-border);
     }
 }
 
@@ -176,19 +224,19 @@ export default {
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        color: rgba(0, 0, 0, 0.55);
+        color: var(--adm-muted);
         padding: 6px 10px;
     }
 
     td {
         padding: 8px 10px;
-        background-color: whitesmoke;
-        border-bottom: 2px solid white;
+        background-color: var(--adm-surface);
+        border-bottom: 2px solid var(--adm-row-separator);
         vertical-align: middle;
     }
 
     tr:hover td {
-        background-color: beige;
+        background-color: var(--adm-hover);
     }
 }
 
@@ -209,7 +257,7 @@ export default {
         display: block;
         font-size: 13px;
         margin-bottom: 4px;
-        color: rgba(0, 0, 0, 0.6);
+        color: var(--adm-muted);
     }
 
     .adm-input {
@@ -226,7 +274,7 @@ export default {
         display: flex;
         align-items: center;
         gap: 6px;
-        background: whitesmoke;
+        background: var(--adm-surface);
         border-radius: 8px;
         padding: 6px 10px;
         cursor: pointer;
@@ -248,25 +296,26 @@ export default {
     padding: 10px 12px;
     box-sizing: border-box;
     border-radius: 8px;
-    background-color: whitesmoke;
+    color: var(--adm-text);
+    background-color: var(--adm-surface);
 
     &--error {
-        background-color: rgba(165, 36, 61, 0.1);
-        color: rgba(120, 20, 40, 1);
+        background-color: var(--adm-danger-soft);
+        color: var(--adm-danger-text);
     }
 
     &--ok {
-        background-color: rgba(120, 170, 100, 0.15);
+        background-color: var(--adm-success-soft);
     }
 }
 
 .adm-muted {
-    color: rgba(0, 0, 0, 0.5);
+    color: var(--adm-muted);
 }
 
 .adm-file-note {
     font-size: 13px;
-    color: rgba(0, 0, 0, 0.55);
+    color: var(--adm-muted);
     margin: 4px 0 12px;
 }
 </style>
