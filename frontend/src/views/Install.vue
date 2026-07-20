@@ -19,6 +19,19 @@
 <script>
 import { db, setTrackTypes } from '../db';
 import { config } from '../lib/config';
+import { setAppTheme } from '../lib/theme';
+
+const USER_SETTING_KEYS = [
+    'appTheme',
+    'notesVisible',
+    'fontSize',
+    'slideshowTheme',
+    'slideshowFontSize',
+    'slideshowStrictSize',
+    'slideshowWrapLines',
+    'slideshowOffsetX',
+    'slideshowOffsetY',
+];
 
 export default {
     name: 'Install',
@@ -48,6 +61,9 @@ export default {
                     (await db.songs.count()) > 0;
 
                 if (refresh) {
+                    this.message = 'Atkuriami numatytieji nustatymai…';
+                    this.resetUserSettings();
+
                     // Forget previously cached audio / sheet music / JSON so
                     // updated files on the server are actually re-downloaded
                     this.message = 'Valomi seni duomenys…';
@@ -78,7 +94,12 @@ export default {
                 );
                 localStorage.setItem('lastInstall', String(Date.now()));
 
-                this.success();
+                if (refresh) {
+                    this.message = 'Tikrinama nauja programėlės versija…';
+                    await this.updateApplicationCode();
+                }
+
+                this.success(refresh);
             } catch (error) {
                 console.error(error);
                 this.status = 'error';
@@ -99,6 +120,45 @@ export default {
                 );
             } catch (error) {
                 console.error('Nepavyko išvalyti podėlio:', error);
+            }
+        },
+
+        resetUserSettings() {
+            USER_SETTING_KEYS.forEach(key => localStorage.removeItem(key));
+            setAppTheme('light');
+        },
+
+        async updateApplicationCode() {
+            if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+
+            try {
+                const registration =
+                    (await navigator.serviceWorker.getRegistration('/')) ||
+                    (await navigator.serviceWorker.register('/sw.js', {
+                        updateViaCache: 'none',
+                    }));
+
+                await registration.update();
+                const worker = registration.installing || registration.waiting;
+                if (!worker || worker.state === 'activated') return;
+
+                await Promise.race([
+                    new Promise(resolve => {
+                        const onStateChange = () => {
+                            if (['activated', 'redundant'].includes(worker.state)) {
+                                worker.removeEventListener('statechange', onStateChange);
+                                resolve();
+                            }
+                        };
+                        worker.addEventListener('statechange', onStateChange);
+                        onStateChange();
+                    }),
+                    new Promise(resolve => window.setTimeout(resolve, 4000)),
+                ]);
+            } catch (error) {
+                // The database refresh should still finish when the browser is
+                // offline or service workers are unavailable.
+                console.warn('Nepavyko patikrinti programėlės kodo:', error);
             }
         },
 
@@ -173,9 +233,15 @@ export default {
             });
         },
 
-        success() {
+        success(refresh = false) {
             this.status = 'ready';
-            setTimeout(() => this.$router.replace('/'), 800);
+            setTimeout(() => {
+                if (refresh) {
+                    window.location.replace(`/?updated=${Date.now()}`);
+                } else {
+                    this.$router.replace('/');
+                }
+            }, 800);
         },
     },
 };
