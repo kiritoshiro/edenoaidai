@@ -156,8 +156,19 @@ export default {
 
             padding: 10px;
 
-            border: 1px solid rgba(0, 0, 0, 0.01);
-            box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.1);
+            color: var(--app-text);
+            background: var(--app-surface);
+            border: 1px solid var(--app-border);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+
+            &::placeholder {
+                color: var(--app-muted);
+            }
+
+            &:focus {
+                outline: 2px solid var(--app-accent);
+                outline-offset: 2px;
+            }
         }
     }
 }

@@ -56,10 +56,10 @@ export default {
     margin: 0 auto 10px;
     padding: 10px 20px;
     font-size: 16px;
-    background-color: rgba(217, 178, 111, 1);
-    color: #2f2f2f;
-    border: none;
-    border-radius: 5px;
+    background-color: var(--app-accent);
+    color: #2b2114;
+    border: 1px solid transparent;
+    border-radius: 12px;
     cursor: pointer;
     box-shadow: 2px 5px 10px 0 rgba(0, 0, 0, 0.1);
     text-decoration: none;
@@ -67,7 +67,8 @@ export default {
     transition: box-shadow ease-in-out 0.2s;
 }
 .update-button:hover {
-    background-color: beige;
+    background-color: var(--app-accent-soft);
+    color: var(--app-text);
     box-shadow: 2px 5px 10px 0 rgba(0, 0, 0, 0.3);
 }
 </style>

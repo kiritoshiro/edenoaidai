@@ -71,11 +71,14 @@ export default {
     font-size: 16px;
     line-height: 1.5;
 
-    color: #2f2f2f;
+    color: var(--app-text);
     text-decoration: none;
 
-    background-color: whitesmoke;
-    border: none;
+    overflow: hidden;
+    background-color: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 14px;
+    box-shadow: 0 5px 18px rgba(47, 38, 26, 0.06);
 
     margin: 10px 0;
 
@@ -87,9 +90,11 @@ export default {
 
         padding: 0 15px;
 
-        border-radius: 0 99px 99px 0;
-
-        background-color: rgba(217, 178, 111, 1);
+        min-width: 32px;
+        justify-content: center;
+        background-color: var(--app-accent);
+        color: #2b2114;
+        font-weight: 700;
     }
 
     &__title {
@@ -103,8 +108,8 @@ export default {
     transition: box-shadow ease-in-out 0.2s;
 
     &:hover {
-        background-color: beige;
-        box-shadow: 2px 5px 10px 0 rgba(0, 0, 0, 0.1);
+        background-color: var(--app-hover);
+        box-shadow: 0 10px 24px rgba(47, 38, 26, 0.12);
     }
 }
 .icons {
@@ -136,8 +141,8 @@ export default {
     padding: 0;
     margin: 0 0.2em;
     border-radius: 50%;
-    background-color: rgba(217, 178, 111, 1);
-    color: #2f2f2f;
+    background-color: var(--app-accent);
+    color: #2b2114;
     font-size: 14px;
     font-weight: bold;
 }
