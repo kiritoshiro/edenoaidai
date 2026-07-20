@@ -183,6 +183,15 @@
                     </div>
                     <button
                         type="button"
+                        class="song-notes__toggle"
+                        :aria-expanded="notesVisible"
+                        @click="notesVisible = !notesVisible"
+                    >
+                        <span aria-hidden="true">{{ notesVisible ? '▴' : '▾' }}</span>
+                        {{ notesVisible ? 'Slėpti natas' : 'Rodyti natas' }}
+                    </button>
+                    <button
+                        type="button"
                         class="song-notes__fullscreen"
                         @click="openNotesFullscreen"
                     >
@@ -193,6 +202,7 @@
             </div>
 
             <div
+                v-show="notesVisible"
                 class="song-image"
                 :class="{ 'song-image--svg': imageType === 'svg' }"
             >
@@ -787,6 +797,7 @@ export default {
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
+            notesVisible: true,
             notesPageIndex: 0,
             notesZoom: 1,
             previousNotesBodyOverflow: '',
@@ -795,6 +806,7 @@ export default {
             audioCurrentTime: 0,
             audioDuration: 0,
             audioVolume: 0.85,
+            trackLabels: {},
             fontSize: parseInt(localStorage.getItem('fontSize'), 10) || 24,
             slideshowOpen: false,
             slideshowIndex: 0,
@@ -991,8 +1003,10 @@ export default {
     watch: {
         songId() {
             this.closeNotesFullscreen();
+            this.notesVisible = true;
             this.resetAudioState();
             if (!this.presenterConnected) this.closeSlideshow();
+            this.fetchTrackLabels();
             this.fetchSong();
         },
         imageUrls(value) {
@@ -1080,6 +1094,7 @@ export default {
     },
     created() {
         this.fetchSongIds();
+        this.fetchTrackLabels();
         this.fetchSong();
     },
     mounted() {
@@ -1640,6 +1655,8 @@ export default {
             this.imageErrored[index] = true;
         },
         audioTypeLabel(type) {
+            const savedLabel = String(this.trackLabels[type] || '').trim();
+            if (savedLabel) return savedLabel;
             const cleaned = String(type || '')
                 .replace(/&/g, ' ir ')
                 .replace(/[_-]+/g, ' ')
@@ -1648,6 +1665,25 @@ export default {
             return cleaned
                 ? cleaned.charAt(0).toLocaleUpperCase('lt') + cleaned.slice(1)
                 : 'Įrašas';
+        },
+        async fetchTrackLabels() {
+            try {
+                const separator = config.tracksUrl.includes('?') ? '&' : '?';
+                const response = await fetch(
+                    `${config.tracksUrl}${separator}t=${Date.now()}`,
+                    { cache: 'no-store' },
+                );
+                if (!response.ok) return;
+                const tracks = await response.json();
+                if (!Array.isArray(tracks)) return;
+                this.trackLabels = Object.fromEntries(
+                    tracks
+                        .filter(track => track?.name)
+                        .map(track => [track.name, track.label || track.name]),
+                );
+            } catch (error) {
+                console.warn('Nepavyko atnaujinti įrašų pavadinimų:', error);
+            }
         },
         async toggleAudio() {
             const audio = this.$refs.audioElement;
@@ -2039,7 +2075,8 @@ export default {
         gap: 8px;
     }
 
-    &__fullscreen {
+    &__fullscreen,
+    &__toggle {
         display: inline-flex;
         align-items: center;
         gap: 7px;

@@ -233,9 +233,20 @@ export default {
     }
 }
 
+.adm-status-slot {
+    position: relative;
+    min-height: 52px;
+    margin: 8px 0;
+}
+
 .adm-status {
-    margin: 12px 0;
+    position: absolute;
+    inset: 0 0 auto;
+    max-height: 52px;
+    overflow: auto;
+    margin: 0;
     padding: 10px 12px;
+    box-sizing: border-box;
     border-radius: 8px;
     background-color: whitesmoke;
 

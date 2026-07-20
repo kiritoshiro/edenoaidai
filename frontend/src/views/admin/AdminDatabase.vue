@@ -19,8 +19,10 @@
             <b>server/files/audio/</b> aplankų struktūrą; details.json nebereikalingas.
         </p>
 
-        <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
-        <p v-if="message" class="adm-status adm-status--ok">{{ message }}</p>
+        <div class="adm-status-slot" aria-live="polite">
+            <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
+            <p v-else-if="message" class="adm-status adm-status--ok">{{ message }}</p>
+        </div>
 
         <div class="adm-toolbar">
             <input

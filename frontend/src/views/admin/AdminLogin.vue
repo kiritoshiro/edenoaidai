@@ -16,7 +16,9 @@
                 />
             </label>
 
-            <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
+            <div class="adm-status-slot" aria-live="polite">
+                <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
+            </div>
 
             <button class="adm-button adm-login__submit" :disabled="busy">
                 {{ busy ? 'Jungiamasi…' : 'Prisijungti' }}

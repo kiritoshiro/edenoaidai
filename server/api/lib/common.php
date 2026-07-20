@@ -180,16 +180,15 @@ function detected_note_page_count(array $notePages): int
 function admin_note_file_entries(string $songId, string $format): array
 {
     $existingPages = note_pages_for_format($songId, $format);
-    $existing = array_flip($existingPages);
-    $lastPage = $existingPages ? min(8, max($existingPages) + 1) : 0;
     $entries = [];
 
-    // Include existing pages, gaps, and one empty slot for the next upload.
-    for ($page = 0; $page <= $lastPage; $page++) {
+    // The admin lists real files only. A new empty upload slot is added
+    // explicitly in the UI when the administrator asks for another page.
+    foreach ($existingPages as $page) {
         $entries[] = [
             'page' => $page,
             'file' => notes_file_name($songId, $page, $format),
-            'exists' => isset($existing[$page]),
+            'exists' => true,
         ];
     }
     return $entries;

@@ -9,8 +9,10 @@
             </h2>
         </div>
 
-        <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
-        <p v-if="message" class="adm-status adm-status--ok">{{ message }}</p>
+        <div class="adm-status-slot" aria-live="polite">
+            <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
+            <p v-else-if="message" class="adm-status adm-status--ok">{{ message }}</p>
+        </div>
 
         <form v-if="song" @submit.prevent="save">
             <label class="adm-field" style="max-width: 200px">
@@ -191,51 +193,85 @@
 
             <h2>Natos</h2>
             <p class="adm-file-note">
-                Puslapiai aptinkami automatiškai pagal SVG ir JPG failus.
-                Tuščia eilutė po paskutinio failo skirta kitam puslapiui įkelti.
+                Rodomi tik serveryje esantys SVG ir JPG failai. Naują natų puslapį
+                pridėkite atitinkamo formato mygtuku.
             </p>
-            <table v-for="format in ['svg', 'jpg']" :key="format" class="adm-table" style="margin-bottom: 20px">
-                <thead>
-                    <tr>
-                        <th style="width: 40%">{{ format.toUpperCase() }} failas</th>
-                        <th>Būsena</th>
-                        <th style="text-align: right">Veiksmai</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="entry in files.notes[format]" :key="entry.file">
-                        <td>{{ entry.file }}</td>
-                        <td>
-                            <a
-                                v-if="entry.exists"
-                                :href="`${apiUrl}/files/notes/${format}/${entry.file}`"
-                                target="_blank"
-                                rel="noopener"
-                            >Yra – peržiūrėti ↗</a>
-                            <span v-else class="adm-muted">Nėra</span>
-                        </td>
-                        <td style="text-align: right">
-                            <label class="adm-button adm-button--ghost" style="display: inline-block; cursor: pointer">
-                                Įkelti {{ format.toUpperCase() }}
-                                <input
-                                    type="file"
-                                    :accept="format === 'svg' ? '.svg,image/svg+xml' : '.jpg,.jpeg,image/jpeg'"
-                                    style="display: none"
-                                    @change="onUploadNotes(format, entry.page, $event)"
-                                />
-                            </label>
-                            <button
-                                v-if="entry.exists"
-                                class="adm-button adm-button--danger"
-                                style="margin-left: 6px"
-                                @click="onDeleteNotes(format, entry.page)"
-                            >
-                                Šalinti
-                            </button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <section
+                v-for="format in ['svg', 'jpg']"
+                :key="format"
+                class="note-format-editor"
+            >
+                <div class="note-format-editor__header">
+                    <h3>{{ format.toUpperCase() }}</h3>
+                    <button
+                        type="button"
+                        class="adm-button adm-button--ghost"
+                        :disabled="!canAddNote(format)"
+                        @click="addNoteSlot(format)"
+                    >
+                        + Pridėti natų puslapį
+                    </button>
+                </div>
+
+                <p v-if="!files.notes[format].length" class="adm-muted">
+                    Šio formato natų failų nėra.
+                </p>
+                <table v-else class="adm-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40%">Failas</th>
+                            <th>Būsena</th>
+                            <th style="text-align: right">Veiksmai</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="entry in files.notes[format]" :key="`${format}-${entry.page}`">
+                            <td>{{ entry.file }}</td>
+                            <td>
+                                <a
+                                    v-if="entry.exists"
+                                    :href="`${apiUrl}/files/notes/${format}/${entry.file}`"
+                                    target="_blank"
+                                    rel="noopener"
+                                >Yra – peržiūrėti ↗</a>
+                                <span v-else class="adm-muted">Laukiama failo</span>
+                            </td>
+                            <td style="text-align: right">
+                                <label
+                                    v-if="!entry.exists"
+                                    class="adm-button adm-button--ghost"
+                                    style="display: inline-block; cursor: pointer"
+                                >
+                                    Pasirinkti {{ format.toUpperCase() }}
+                                    <input
+                                        type="file"
+                                        :accept="format === 'svg' ? '.svg,image/svg+xml' : '.jpg,.jpeg,image/jpeg'"
+                                        style="display: none"
+                                        @change="onUploadNotes(format, entry.page, $event)"
+                                    />
+                                </label>
+                                <button
+                                    v-if="entry.exists"
+                                    type="button"
+                                    class="adm-button adm-button--danger"
+                                    @click="onDeleteNotes(format, entry.page)"
+                                >
+                                    Šalinti
+                                </button>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="adm-button adm-button--danger"
+                                    style="margin-left: 6px"
+                                    @click="removeNoteSlot(format, entry.page)"
+                                >
+                                    Atšaukti
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
         </template>
     </div>
 </template>
@@ -399,7 +435,14 @@ export default {
         },
         async loadFiles() {
             try {
-                this.files = await api.songFiles(this.songId);
+                const files = await api.songFiles(this.songId);
+                files.notes = files.notes || {};
+                for (const format of ['svg', 'jpg']) {
+                    files.notes[format] = (files.notes[format] || [])
+                        .filter(entry => entry.exists)
+                        .map(entry => ({ ...entry, temporary: false }));
+                }
+                this.files = files;
             } catch (error) {
                 console.error(error);
                 this.files = null;
@@ -497,6 +540,36 @@ export default {
                 this.error = error.message;
             }
         },
+        noteFileName(format, page) {
+            return page === 0
+                ? `${this.songId}.${format}`
+                : `${this.songId}_${page}.${format}`;
+        },
+        canAddNote(format) {
+            const entries = this.files?.notes?.[format] || [];
+            return entries.length < 9 && !entries.some(entry => !entry.exists);
+        },
+        addNoteSlot(format) {
+            if (!this.canAddNote(format)) return;
+            const entries = this.files.notes[format];
+            const occupied = new Set(entries.map(entry => Number(entry.page)));
+            let page = 0;
+            while (occupied.has(page) && page <= 8) page += 1;
+            if (page > 8) return;
+            entries.push({
+                page,
+                file: this.noteFileName(format, page),
+                exists: false,
+                temporary: true,
+            });
+            entries.sort((a, b) => a.page - b.page);
+        },
+        removeNoteSlot(format, page) {
+            const entries = this.files?.notes?.[format];
+            if (!entries) return;
+            const index = entries.findIndex(entry => entry.page === page && !entry.exists);
+            if (index >= 0) entries.splice(index, 1);
+        },
         async onDeleteNotes(format, page) {
             if (!window.confirm('Šalinti šį natų failą?')) return;
             try {
@@ -524,6 +597,22 @@ export default {
 
         h3 {
             margin: 0 0 5px;
+        }
+    }
+}
+
+.note-format-editor {
+    margin: 18px 0 24px;
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+
+        h3 {
+            margin: 0;
         }
     }
 }

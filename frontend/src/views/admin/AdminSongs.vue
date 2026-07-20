@@ -13,9 +13,11 @@
             </router-link>
         </div>
 
-        <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
-        <p v-else-if="loading" class="adm-muted">Kraunama…</p>
-        <p v-else-if="!filtered.length" class="adm-muted">Nieko nerasta.</p>
+        <div class="adm-status-slot" aria-live="polite">
+            <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
+        </div>
+        <p v-if="!error && loading" class="adm-muted">Kraunama…</p>
+        <p v-else-if="!error && !filtered.length" class="adm-muted">Nieko nerasta.</p>
 
         <table v-if="filtered.length" class="adm-table">
             <thead>

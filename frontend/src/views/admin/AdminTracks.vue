@@ -9,8 +9,10 @@
             Sąrašas automatiškai perskenuojamas atidarius šį puslapį.
         </p>
 
-        <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
-        <p v-if="message" class="adm-status adm-status--ok">{{ message }}</p>
+        <div class="adm-status-slot" aria-live="polite">
+            <p v-if="error" class="adm-status adm-status--error">{{ error }}</p>
+            <p v-else-if="message" class="adm-status adm-status--ok">{{ message }}</p>
+        </div>
 
         <table v-if="tracks.length" class="adm-table">
             <thead>
