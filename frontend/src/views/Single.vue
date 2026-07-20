@@ -274,6 +274,15 @@
                     </button>
                 </div>
 
+                <button
+                    type="button"
+                    class="lyrics-show__defaults-button"
+                    @click="resetSlideshowSettings"
+                >
+                    <span aria-hidden="true">↺</span>
+                    Numatytieji nustatymai
+                </button>
+
                 <section class="lyrics-show__setting-group">
                     <h3>Vaizdas</h3>
                     <div class="lyrics-show__theme-buttons">
@@ -645,7 +654,6 @@ export default {
                 35,
             ),
             slideshowOverflowIndexes: [],
-            overflowSettingsConfirmed: false,
             slideValidationFrame: 0,
             presenterConnected: false,
             songGalleryOpen: false,
@@ -786,35 +794,30 @@ export default {
                 Math.max(4, Number(value) || 56),
             );
             localStorage.setItem('slideshowFontSize', String(normalized));
-            this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
             this.renderPresenterWindow();
         },
         slideshowStrictSize(value) {
             localStorage.setItem('slideshowStrictSize', String(value));
-            this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
             this.renderPresenterWindow();
         },
         slideshowWrapLines(value) {
             localStorage.setItem('slideshowWrapLines', String(value));
-            this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
             this.renderPresenterWindow();
         },
         slideshowOffsetX(value) {
             localStorage.setItem('slideshowOffsetX', String(value));
-            this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
             this.renderPresenterWindow();
         },
         slideshowOffsetY(value) {
             localStorage.setItem('slideshowOffsetY', String(value));
-            this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
             this.renderPresenterWindow();
@@ -877,8 +880,24 @@ export default {
         },
         closeSlideshowSettings() {
             this.validateAllSlides();
-            if (!this.confirmUnsafeSettings()) return;
             this.slideshowSettingsOpen = false;
+        },
+        resetSlideshowSettings() {
+            this.slideshowTheme = 'dark';
+            this.slideshowFontSize = 56;
+            this.slideshowStrictSize = false;
+            this.slideshowWrapLines = true;
+            this.slideshowOffsetX = 0;
+            this.slideshowOffsetY = 0;
+            this.advancedSettingsOpen = false;
+            this.slideshowOptions = this.slideshowSequence.map(() => ({
+                enabled: true,
+            }));
+            this.$nextTick(() => {
+                this.scheduleSlideFit();
+                this.scheduleSlideValidation();
+                this.renderPresenterWindow();
+            });
         },
         openSlideshow() {
             if (this.sourceSlides.length === 0) return;
@@ -919,9 +938,6 @@ export default {
             this.fullscreenActive = false;
         },
         requestCloseSlideshow() {
-            if (this.slideshowSettingsOpen && !this.confirmUnsafeSettings()) {
-                return;
-            }
             this.closeSlideshow();
         },
         previousSlide() {
@@ -1141,27 +1157,10 @@ export default {
         slideOverflows(index) {
             return this.slideshowOverflowIndexes.includes(index);
         },
-        confirmUnsafeSettings() {
-            const overflowIndexes = this.validateAllSlides();
-            if (overflowIndexes.length === 0 || this.overflowSettingsConfirmed) {
-                return true;
-            }
-
-            const accepted = window.confirm(
-                `${overflowIndexes.length} skaidrė(-ės) netelpa su pasirinktais nustatymais. Ar tikrai norite juos naudoti?`,
-            );
-            this.overflowSettingsConfirmed = accepted;
-            return accepted;
-        },
         async openPresenterWindow() {
             if (this.sourceSlides.length === 0) return;
             this.prepareSlideshowOptions();
             this.validateAllSlides();
-            if (!this.confirmUnsafeSettings()) {
-                if (!this.slideshowOpen) this.openSlideshow();
-                this.slideshowSettingsOpen = true;
-                return;
-            }
 
             if (presenterWindow && !presenterWindow.closed) {
                 presenterWindow.focus();
@@ -1314,16 +1313,8 @@ export default {
             return firstLine.length > 70 ? `${firstLine.slice(0, 70)}…` : firstLine;
         },
         onFullscreenChange() {
-            if (
-                this.slideshowOpen &&
-                this.fullscreenActive &&
-                !document.fullscreenElement
-            ) {
-                this.slideshowOpen = false;
-                this.fullscreenActive = false;
-                document.body.style.overflow = this.previousBodyOverflow;
-                this.closePresenterWindow();
-            } else if (this.slideshowOpen) {
+            this.fullscreenActive = Boolean(document.fullscreenElement);
+            if (this.slideshowOpen) {
                 this.scheduleSlideFit();
             }
         },
@@ -2201,6 +2192,28 @@ export default {
             background: var(--lyrics-show-control);
             font-size: 25px;
             cursor: pointer;
+        }
+    }
+
+    &__defaults-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 42px;
+        margin-top: 16px;
+        padding: 9px 14px;
+        border: 1px solid var(--lyrics-show-border);
+        border-radius: 10px;
+        color: var(--lyrics-show-text);
+        background: var(--lyrics-show-control);
+        font-weight: 700;
+        cursor: pointer;
+
+        &:hover {
+            border-color: #d9b26f;
+            background: var(--lyrics-show-panel-soft);
         }
     }
 
