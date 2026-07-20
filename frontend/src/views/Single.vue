@@ -1526,7 +1526,12 @@ export default {
 </style></head><body><div id="stage"><div id="title"></div><div id="area"><div id="content"></div></div><div id="counter"></div></div><button class="zone left" aria-label="Ankstesnė skaidrė"></button><button class="zone right" aria-label="Kita skaidrė"></button></body></html>`);
             presenterWindow.document.close();
             presenterWindow.document.getElementById('area').style.overflow = 'visible';
-            presenterWindow.document.getElementById('content').style.overflow = 'visible';
+            const presenterContent = presenterWindow.document.getElementById('content');
+            presenterContent.style.overflow = 'visible';
+            presenterContent.style.justifySelf = 'stretch';
+            presenterContent.style.width = '100%';
+            presenterContent.style.boxSizing = 'border-box';
+            presenterContent.style.padding = '30px clamp(18px, 4vw, 72px)';
             presenterWindow.document.querySelector('.zone.left').onclick = () =>
                 this.previousSlide();
             presenterWindow.document.querySelector('.zone.right').onclick = () =>
@@ -2755,13 +2760,13 @@ export default {
     &__content {
         z-index: 2;
         align-self: center;
-        justify-self: center;
-        width: min(1200px, 86vw);
+        justify-self: stretch;
+        width: 100%;
         min-height: 0;
         height: auto;
         max-height: 100%;
         overflow: visible;
-        padding: 30px 0;
+        padding: 30px clamp(18px, 4vw, 72px);
         box-sizing: border-box;
         font-size: var(--lyrics-font-size, 56px);
         font-weight: 600;
@@ -2776,6 +2781,12 @@ export default {
             var(--lyrics-offset-y, 0)
         );
         pointer-events: none;
+
+        > span {
+            display: block;
+            width: 100%;
+            text-align: center;
+        }
     }
 
     &__overview {
@@ -3365,7 +3376,7 @@ export default {
         }
 
         &__content {
-            width: 88vw;
+            width: 100%;
         }
 
         &__controls {
@@ -3394,11 +3405,11 @@ export default {
 
     &__content {
         align-self: center;
-        justify-self: center;
-        width: min(1200px, 86vw);
+        justify-self: stretch;
+        width: 100%;
         max-height: 100%;
         overflow: hidden;
-        padding: 30px 0;
+        padding: 30px clamp(18px, 4vw, 72px);
         box-sizing: border-box;
         font-size: var(--lyrics-font-size, 56px);
         font-weight: 600;
