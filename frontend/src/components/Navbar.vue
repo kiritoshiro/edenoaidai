@@ -31,40 +31,14 @@
                     Išsaugota
                 </router-link>
             </li>
-            <li>
-                <button
-                    type="button"
-                    class="menu__item menu__theme"
-                    :aria-label="isDark ? 'Įjungti šviesią temą' : 'Įjungti tamsią temą'"
-                    :title="isDark ? 'Šviesi tema' : 'Tamsi tema'"
-                    @click="toggleTheme"
-                >
-                    <span class="menu__theme-icon" aria-hidden="true">
-                        {{ isDark ? '☀' : '☾' }}
-                    </span>
-                    {{ isDark ? 'Šviesi' : 'Tamsi' }}
-                </button>
-            </li>
             </ul>
         </nav>
     </footer>
 </template>
 
 <script>
-import { appTheme, toggleAppTheme } from '../lib/theme';
-
 export default {
     name: 'Navbar',
-    computed: {
-        isDark() {
-            return appTheme.value === 'dark';
-        },
-    },
-    methods: {
-        toggleTheme() {
-            toggleAppTheme();
-        },
-    },
 };
 </script>
 
@@ -85,7 +59,7 @@ export default {
 
     .menu {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 4px;
         margin: 0;
         padding: 6px;
@@ -116,8 +90,7 @@ export default {
             transition: color 0.18s ease, background-color 0.18s ease,
                 transform 0.18s ease;
 
-            .icon,
-            .menu__theme-icon {
+            .icon {
                 width: 22px;
                 height: 22px;
                 font-size: 22px;
