@@ -192,9 +192,22 @@
             <button
                 class="lyrics-show__presenter-button"
                 :class="{ 'is-active': presenterConnected }"
-                aria-label="Rodyti skaidres kitame ekrane"
-                title="Kitas ekranas"
-                @click.stop="openPresenterWindow"
+                :disabled="phoneViewport"
+                :aria-label="
+                    phoneViewport
+                        ? 'Kitas ekranas telefone nepasiekiamas'
+                        : presenterConnected
+                          ? 'Uždaryti kitą ekraną'
+                          : 'Rodyti skaidres kitame ekrane'
+                "
+                :title="
+                    phoneViewport
+                        ? 'Telefone ši funkcija nepasiekiama'
+                        : presenterConnected
+                          ? 'Uždaryti kitą ekraną'
+                          : 'Kitas ekranas'
+                "
+                @click.stop="togglePresenterWindow"
             >
                 ▱
             </button>
@@ -625,9 +638,9 @@ export default {
             previousBodyOverflow: '',
             slideshowSettingsOpen: false,
             slideshowTheme:
-                localStorage.getItem('slideshowTheme') === 'light'
-                    ? 'light'
-                    : 'dark',
+                localStorage.getItem('slideshowTheme') === 'dark'
+                    ? 'dark'
+                    : 'light',
             slideshowFontSize: Math.min(
                 MAX_SLIDESHOW_FONT_SIZE,
                 Math.max(
@@ -656,6 +669,7 @@ export default {
             slideshowOverflowIndexes: [],
             slideValidationFrame: 0,
             presenterConnected: false,
+            phoneViewport: window.matchMedia('(max-width: 720px)').matches,
             songGalleryOpen: false,
             songSearch: '',
         };
@@ -849,6 +863,8 @@ export default {
         document.addEventListener('keydown', this.onSlideshowKeydown);
         document.addEventListener('fullscreenchange', this.onFullscreenChange);
         window.addEventListener('resize', this.scheduleSlideFit);
+        window.addEventListener('resize', this.updatePhoneViewport);
+        this.updatePhoneViewport();
         document.fonts?.ready.then(() => {
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
@@ -859,6 +875,7 @@ export default {
         document.removeEventListener('keydown', this.onSlideshowKeydown);
         document.removeEventListener('fullscreenchange', this.onFullscreenChange);
         window.removeEventListener('resize', this.scheduleSlideFit);
+        window.removeEventListener('resize', this.updatePhoneViewport);
         if (this.slideValidationFrame) {
             window.cancelAnimationFrame(this.slideValidationFrame);
         }
@@ -883,7 +900,7 @@ export default {
             this.slideshowSettingsOpen = false;
         },
         resetSlideshowSettings() {
-            this.slideshowTheme = 'dark';
+            this.slideshowTheme = 'light';
             this.slideshowFontSize = 56;
             this.slideshowStrictSize = false;
             this.slideshowWrapLines = true;
@@ -1157,16 +1174,15 @@ export default {
         slideOverflows(index) {
             return this.slideshowOverflowIndexes.includes(index);
         },
-        async openPresenterWindow() {
+        async togglePresenterWindow() {
+            if (this.phoneViewport) return;
+            if (this.presenterConnected || (presenterWindow && !presenterWindow.closed)) {
+                this.closePresenterWindow();
+                return;
+            }
             if (this.sourceSlides.length === 0) return;
             this.prepareSlideshowOptions();
             this.validateAllSlides();
-
-            if (presenterWindow && !presenterWindow.closed) {
-                presenterWindow.focus();
-                this.renderPresenterWindow();
-                return;
-            }
 
             presenterWindow = window.open(
                 '',
@@ -1278,6 +1294,13 @@ export default {
             this.presenterConnected = false;
             this.songGalleryOpen = false;
             this.scheduleSlideFit();
+        },
+        updatePhoneViewport() {
+            const isPhone = window.matchMedia('(max-width: 720px)').matches;
+            if (isPhone && this.presenterConnected) {
+                this.closePresenterWindow();
+            }
+            this.phoneViewport = isPhone;
         },
         openSongGallery() {
             if (!this.presenterConnected) return;
@@ -1795,6 +1818,11 @@ export default {
         right: 142px;
         font-size: 28px;
         line-height: 42px;
+
+        &:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
 
         &.is-active {
             border-color: #d9b26f;
