@@ -80,21 +80,75 @@
             <em>{{ song.verse }}</em>
         </p>
 
-        <div v-for="type in song.lists" :key="type" class="audio-container">
-            <div class="audio-icon">
-                <song-icon :name="type" />
+        <section v-if="audioTypes.length" class="song-audio" aria-label="Giesmės įrašas">
+            <div class="song-audio__header">
+                <div class="song-audio__icon" aria-hidden="true">
+                    <song-icon :name="selectedAudioType" />
+                </div>
+                <label v-if="audioTypes.length > 1" class="song-audio__version">
+                    <span>Įrašo versija</span>
+                    <select v-model="selectedAudioType">
+                        <option v-for="type in audioTypes" :key="type" :value="type">
+                            {{ audioTypeLabel(type) }}
+                        </option>
+                    </select>
+                </label>
+                <div v-else class="song-audio__version song-audio__version--single">
+                    <span>Įrašo versija</span>
+                    <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
+                </div>
             </div>
-            <div class="audio-player">
-                <audio
-                    :key="`${type}-${song.songId}`"
-                    preload="metadata"
-                    controls
+
+            <audio
+                ref="audioElement"
+                :key="`${selectedAudioType}-${song.songId}`"
+                class="song-audio__element"
+                :src="selectedAudioUrl"
+                preload="metadata"
+                @loadedmetadata="syncAudioMetadata"
+                @durationchange="syncAudioMetadata"
+                @timeupdate="syncAudioTime"
+                @play="audioPlaying = true"
+                @pause="audioPlaying = false"
+                @ended="audioPlaying = false"
+            ></audio>
+
+            <div class="song-audio__controls">
+                <button
+                    type="button"
+                    class="song-audio__play"
+                    :aria-label="audioPlaying ? 'Pristabdyti įrašą' : 'Paleisti įrašą'"
+                    @click="toggleAudio"
                 >
-                    <source :src="audioUrl(type)" type="audio/mpeg" />
-                    Naršyklė nepalaiko audio elementų.
-                </audio>
+                    {{ audioPlaying ? '❚❚' : '▶' }}
+                </button>
+                <span class="song-audio__time">{{ formatMediaTime(audioCurrentTime) }}</span>
+                <input
+                    class="song-audio__progress"
+                    type="range"
+                    min="0"
+                    :max="audioDuration || 0"
+                    step="0.1"
+                    :value="audioCurrentTime"
+                    :disabled="!audioDuration"
+                    aria-label="Įrašo pozicija"
+                    @input="seekAudio"
+                />
+                <span class="song-audio__time">{{ formatMediaTime(audioDuration) }}</span>
+                <label class="song-audio__volume" title="Garsumas">
+                    <span aria-hidden="true">♪</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        :value="audioVolume"
+                        aria-label="Garsumas"
+                        @input="setAudioVolume"
+                    />
+                </label>
             </div>
-        </div>
+        </section>
 
         <div style="text-align: center; margin-top: 20px">
             <div
@@ -104,45 +158,146 @@
             ></div>
         </div>
 
-        <div class="image-format-container" style="margin-top: 20px">
-            <button
-                :class="[
-                    'song__font-size-button',
-                    'image-format-button',
-                    { selected: imageType === 'svg' },
-                ]"
-                @click="imageType = 'svg'"
-            >
-                Natos 1#
-            </button>
-            <button
-                :class="[
-                    'song__font-size-button',
-                    'image-format-button',
-                    { selected: imageType === 'jpg' },
-                ]"
-                @click="imageType = 'jpg'"
-            >
-                Natos 2#
-            </button>
-        </div>
-
-        <div class="song-image">
-            <div v-for="(url, index) in imageUrls" :key="url">
-                <div v-if="!imageLoaded[index]" class="image-loader"></div>
-                <img
-                    v-if="!imageErrored[index]"
-                    v-show="imageLoaded[index]"
-                    :src="url"
-                    alt=""
-                    @load="imageLoaded[index] = true"
-                    @error="onImageError(index)"
-                />
+        <section v-if="hasNotes" class="song-notes">
+            <div class="song-notes__header">
+                <h3>Natos</h3>
+                <div class="song-notes__actions">
+                    <div
+                        v-if="availableNoteFormats.length > 1"
+                        class="image-format-container"
+                        aria-label="Natų formatas"
+                    >
+                        <button
+                            v-for="format in availableNoteFormats"
+                            :key="format"
+                            type="button"
+                            :class="[
+                                'song__font-size-button',
+                                'image-format-button',
+                                { selected: imageType === format },
+                            ]"
+                            @click="selectNoteFormat(format)"
+                        >
+                            {{ noteFormatLabel(format) }}
+                        </button>
+                    </div>
+                    <button
+                        type="button"
+                        class="song-notes__fullscreen"
+                        @click="openNotesFullscreen"
+                    >
+                        <span aria-hidden="true">⛶</span>
+                        Per visą ekraną
+                    </button>
+                </div>
             </div>
-        </div>
+
+            <div
+                class="song-image"
+                :class="{ 'song-image--svg': imageType === 'svg' }"
+            >
+                <div v-for="(url, index) in imageUrls" :key="url">
+                    <div v-if="!imageLoaded[index]" class="image-loader"></div>
+                    <img
+                        v-if="!imageErrored[index]"
+                        v-show="imageLoaded[index]"
+                        :src="url"
+                        :alt="`Giesmės ${song.songId} natų ${index + 1} puslapis`"
+                        @load="imageLoaded[index] = true"
+                        @error="onImageError(index)"
+                    />
+                </div>
+            </div>
+        </section>
 
         <small class="song__copyright" v-html="song.copyright"></small>
     </div>
+
+    <Teleport to="body">
+        <div
+            v-if="notesFullscreenOpen && currentNotePageUrl"
+            class="notes-viewer"
+            :class="{
+                'notes-viewer--dark': isDark,
+                'notes-viewer--svg': imageType === 'svg',
+            }"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Natos per visą ekraną"
+        >
+            <header class="notes-viewer__header">
+                <strong>{{ song.songId }} {{ song.title }}</strong>
+                <div class="notes-viewer__toolbar">
+                    <div
+                        v-if="availableNoteFormats.length > 1"
+                        class="notes-viewer__formats"
+                    >
+                        <button
+                            v-for="format in availableNoteFormats"
+                            :key="format"
+                            type="button"
+                            :class="{ selected: imageType === format }"
+                            @click="selectNoteFormat(format)"
+                        >
+                            {{ noteFormatLabel(format) }}
+                        </button>
+                    </div>
+                    <button type="button" aria-label="Mažinti natas" @click="adjustNotesZoom(-0.25)">−</button>
+                    <button type="button" class="notes-viewer__zoom" @click="notesZoom = 1">
+                        {{ Math.round(notesZoom * 100) }}%
+                    </button>
+                    <button type="button" aria-label="Didinti natas" @click="adjustNotesZoom(0.25)">+</button>
+                    <button
+                        type="button"
+                        class="notes-viewer__close"
+                        aria-label="Uždaryti natas"
+                        @click="closeNotesFullscreen"
+                    >
+                        ×
+                    </button>
+                </div>
+            </header>
+
+            <div ref="notesViewport" class="notes-viewer__viewport">
+                <img
+                    :src="currentNotePageUrl"
+                    :alt="`Giesmės ${song.songId} natų ${notesPageIndex + 1} puslapis`"
+                    :style="notesImageStyle"
+                />
+            </div>
+
+            <button
+                type="button"
+                class="notes-viewer__page-button notes-viewer__page-button--previous"
+                :disabled="notesPageIndex === 0"
+                aria-label="Ankstesnis natų puslapis"
+                @click="previousNotePage"
+            >
+                ‹
+            </button>
+            <button
+                type="button"
+                class="notes-viewer__page-button notes-viewer__page-button--next"
+                :disabled="notesPageIndex >= imageUrls.length - 1"
+                aria-label="Kitas natų puslapis"
+                @click="nextNotePage"
+            >
+                ›
+            </button>
+
+            <footer class="notes-viewer__footer">
+                <button type="button" :disabled="notesPageIndex === 0" @click="previousNotePage">←</button>
+                <span>{{ notesPageIndex + 1 }} / {{ imageUrls.length }}</span>
+                <button
+                    type="button"
+                    :disabled="notesPageIndex >= imageUrls.length - 1"
+                    @click="nextNotePage"
+                >
+                    →
+                </button>
+            </footer>
+        </div>
+    </Teleport>
 
     <Teleport to="body">
         <div
@@ -631,6 +786,15 @@ export default {
             imageType: 'jpg',
             imageLoaded: [],
             imageErrored: [],
+            notesFullscreenOpen: false,
+            notesPageIndex: 0,
+            notesZoom: 1,
+            previousNotesBodyOverflow: '',
+            selectedAudioType: '',
+            audioPlaying: false,
+            audioCurrentTime: 0,
+            audioDuration: 0,
+            audioVolume: 0.85,
             fontSize: parseInt(localStorage.getItem('fontSize'), 10) || 24,
             slideshowOpen: false,
             slideshowIndex: 0,
@@ -681,10 +845,40 @@ export default {
         fontSizeStyle() {
             return { fontSize: `${this.fontSize}px` };
         },
+        audioTypes() {
+            return Array.isArray(this.song?.lists)
+                ? this.song.lists.filter(Boolean)
+                : [];
+        },
+        selectedAudioUrl() {
+            return this.selectedAudioType
+                ? this.audioUrl(this.selectedAudioType)
+                : '';
+        },
+        availableNoteFormats() {
+            const detected = this.song?.notePages;
+            if (detected && typeof detected === 'object') {
+                return ['svg', 'jpg'].filter(
+                    format =>
+                        Array.isArray(detected[format]) &&
+                        detected[format].length > 0,
+                );
+            }
+
+            const legacyCount = Number(this.song?.pages) || 0;
+            return legacyCount > 0 ? ['svg', 'jpg'] : [];
+        },
+        hasNotes() {
+            return this.availableNoteFormats.length > 0;
+        },
         notePageIndexes() {
             const detected = this.song?.notePages?.[this.imageType];
             if (Array.isArray(detected)) {
                 return detected;
+            }
+
+            if (this.song?.notePages && typeof this.song.notePages === 'object') {
+                return [];
             }
 
             // Compatibility with data cached by older installed versions.
@@ -755,6 +949,14 @@ export default {
                 (_, index) => this.slideshowOptions[index]?.enabled !== false,
             );
         },
+        currentNotePageUrl() {
+            return this.imageUrls[this.notesPageIndex] || '';
+        },
+        notesImageStyle() {
+            return {
+                width: `${this.notesZoom * 100}%`,
+            };
+        },
         currentSlide() {
             return this.slideshowSlides[this.slideshowIndex] || null;
         },
@@ -788,11 +990,32 @@ export default {
     },
     watch: {
         songId() {
+            this.closeNotesFullscreen();
+            this.resetAudioState();
             if (!this.presenterConnected) this.closeSlideshow();
             this.fetchSong();
         },
-        imageUrls() {
+        imageUrls(value) {
             this.resetImages();
+            this.notesPageIndex = Math.min(
+                this.notesPageIndex,
+                Math.max(0, value.length - 1),
+            );
+            if (value.length === 0) this.closeNotesFullscreen();
+        },
+        availableNoteFormats(formats) {
+            if (!formats.includes(this.imageType)) {
+                this.imageType = formats[0] || 'jpg';
+            }
+        },
+        audioTypes(types) {
+            if (!types.includes(this.selectedAudioType)) {
+                this.selectedAudioType = types[0] || '';
+            }
+            if (types.length === 0) this.resetAudioState();
+        },
+        selectedAudioType() {
+            this.onAudioVersionChange();
         },
         fontSize(value) {
             localStorage.setItem('fontSize', String(value));
@@ -881,6 +1104,8 @@ export default {
         }
         this.closePresenterWindow();
         this.closeSlideshow();
+        this.closeNotesFullscreen();
+        this.resetAudioState();
     },
     methods: {
         toggleTheme() {
@@ -985,6 +1210,25 @@ export default {
             });
         },
         onSlideshowKeydown(event) {
+            if (this.notesFullscreenOpen) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    this.closeNotesFullscreen();
+                } else if (['ArrowRight', 'PageDown'].includes(event.key)) {
+                    event.preventDefault();
+                    this.nextNotePage();
+                } else if (['ArrowLeft', 'PageUp'].includes(event.key)) {
+                    event.preventDefault();
+                    this.previousNotePage();
+                } else if (['+', '='].includes(event.key)) {
+                    event.preventDefault();
+                    this.adjustNotesZoom(0.25);
+                } else if (event.key === '-') {
+                    event.preventDefault();
+                    this.adjustNotesZoom(-0.25);
+                }
+                return;
+            }
             if (!this.slideshowOpen && !this.presenterConnected) return;
             if (this.songGalleryOpen) {
                 if (event.key === 'Escape') {
@@ -1345,9 +1589,125 @@ export default {
             this.imageLoaded = this.imageUrls.map(() => false);
             this.imageErrored = this.imageUrls.map(() => false);
         },
+        selectNoteFormat(format) {
+            if (!this.availableNoteFormats.includes(format)) return;
+            this.imageType = format;
+            this.notesPageIndex = 0;
+            this.notesZoom = 1;
+            this.$nextTick(() => this.resetNotesViewport());
+        },
+        noteFormatLabel(format) {
+            return format === 'svg' ? 'SVG' : 'JPG';
+        },
+        openNotesFullscreen() {
+            if (!this.currentNotePageUrl) return;
+            this.previousNotesBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            this.notesPageIndex = 0;
+            this.notesZoom = 1;
+            this.notesFullscreenOpen = true;
+            this.$nextTick(() => this.resetNotesViewport());
+        },
+        closeNotesFullscreen() {
+            if (!this.notesFullscreenOpen) return;
+            this.notesFullscreenOpen = false;
+            document.body.style.overflow = this.previousNotesBodyOverflow;
+        },
+        previousNotePage() {
+            this.notesPageIndex = Math.max(0, this.notesPageIndex - 1);
+            this.resetNotesViewport();
+        },
+        nextNotePage() {
+            this.notesPageIndex = Math.min(
+                Math.max(0, this.imageUrls.length - 1),
+                this.notesPageIndex + 1,
+            );
+            this.resetNotesViewport();
+        },
+        adjustNotesZoom(delta) {
+            this.notesZoom = clamp(this.notesZoom + delta, 1, 3);
+        },
+        resetNotesViewport() {
+            this.$nextTick(() => {
+                const viewport = this.$refs.notesViewport;
+                if (!viewport) return;
+                viewport.scrollTop = 0;
+                viewport.scrollLeft = 0;
+            });
+        },
         onImageError(index) {
             this.imageLoaded[index] = true;
             this.imageErrored[index] = true;
+        },
+        audioTypeLabel(type) {
+            const cleaned = String(type || '')
+                .replace(/&/g, ' ir ')
+                .replace(/[_-]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            return cleaned
+                ? cleaned.charAt(0).toLocaleUpperCase('lt') + cleaned.slice(1)
+                : 'Įrašas';
+        },
+        async toggleAudio() {
+            const audio = this.$refs.audioElement;
+            if (!audio) return;
+            if (audio.paused) {
+                try {
+                    await audio.play();
+                } catch (error) {
+                    console.error('Nepavyko paleisti įrašo:', error);
+                }
+            } else {
+                audio.pause();
+            }
+        },
+        syncAudioMetadata(event) {
+            const audio = event?.currentTarget || this.$refs.audioElement;
+            if (!audio) return;
+            this.audioDuration = Number.isFinite(audio.duration)
+                ? audio.duration
+                : 0;
+            audio.volume = this.audioVolume;
+        },
+        syncAudioTime(event) {
+            this.audioCurrentTime = event.currentTarget.currentTime || 0;
+        },
+        seekAudio(event) {
+            const audio = this.$refs.audioElement;
+            if (!audio) return;
+            const next = Number(event.target.value) || 0;
+            audio.currentTime = next;
+            this.audioCurrentTime = next;
+        },
+        setAudioVolume(event) {
+            const next = clamp(event.target.value, 0, 1);
+            this.audioVolume = next;
+            if (this.$refs.audioElement) this.$refs.audioElement.volume = next;
+        },
+        onAudioVersionChange() {
+            this.resetAudioState();
+            this.$nextTick(() => {
+                const audio = this.$refs.audioElement;
+                if (!audio || !this.selectedAudioType) return;
+                audio.volume = this.audioVolume;
+                audio.load();
+            });
+        },
+        resetAudioState() {
+            const audio = this.$refs.audioElement;
+            if (audio && !audio.paused) audio.pause();
+            this.audioPlaying = false;
+            this.audioCurrentTime = 0;
+            this.audioDuration = 0;
+        },
+        formatMediaTime(seconds) {
+            const safeSeconds = Number.isFinite(Number(seconds))
+                ? Math.max(0, Number(seconds))
+                : 0;
+            const minutes = Math.floor(safeSeconds / 60);
+            const remainder = Math.floor(safeSeconds % 60);
+            return `${minutes}:${String(remainder).padStart(2, '0')}`;
         },
         audioUrl(type) {
             return `${config.audioBase}/${type}/${this.song.songId}.mp3`;
@@ -1414,8 +1774,10 @@ export default {
 
 .image-format-container {
     display: flex;
+    align-items: center;
+    gap: 6px;
     justify-content: center;
-    margin-bottom: 10px;
+    margin: 0;
 }
 
 .image-format-button {
@@ -1424,8 +1786,8 @@ export default {
     background-color: transparent;
     border: none;
     border-radius: 20px;
-    padding: 10px 20px;
-    margin-right: 10px;
+    padding: 8px 15px;
+    margin: 0;
     color: var(--app-text);
     transition: background-color 0.3s, color 0.3s;
     font-weight: normal;
@@ -1504,29 +1866,196 @@ export default {
     cursor: pointer;
 }
 
-.audio-container {
-    display: flex;
+.song-audio {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.8fr) minmax(300px, 1.5fr);
     align-items: center;
-    justify-content: center;
-    margin-bottom: 10px;
+    gap: 18px;
+    width: min(760px, calc(100% - 28px));
+    margin: 16px auto 26px;
+    padding: 15px 18px;
+    border: 1px solid var(--app-border);
+    border-radius: 18px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow);
+
+    &__header,
+    &__controls,
+    &__version,
+    &__volume {
+        display: flex;
+        align-items: center;
+    }
+
+    &__header {
+        min-width: 0;
+        gap: 12px;
+    }
+
+    &__icon {
+        display: grid;
+        flex: 0 0 46px;
+        width: 46px;
+        height: 46px;
+        place-items: center;
+        border-radius: 14px;
+        color: var(--app-text);
+        background: var(--app-accent-soft);
+
+        svg,
+        img {
+            width: 28px;
+            height: 28px;
+        }
+    }
+
+    &__version {
+        min-width: 0;
+        flex: 1;
+        align-items: stretch;
+        flex-direction: column;
+        gap: 3px;
+
+        span {
+            color: var(--app-muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        select,
+        strong {
+            min-width: 0;
+            width: 100%;
+            color: var(--app-text);
+            font-size: 15px;
+        }
+
+        select {
+            min-height: 36px;
+            padding: 5px 30px 5px 9px;
+            border: 1px solid var(--app-border);
+            border-radius: 9px;
+            outline: none;
+            background: var(--app-surface-soft);
+            cursor: pointer;
+
+            &:focus {
+                border-color: var(--app-accent);
+                box-shadow: 0 0 0 3px var(--app-accent-soft);
+            }
+        }
+
+        strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    &__element {
+        display: none;
+    }
+
+    &__controls {
+        min-width: 0;
+        gap: 9px;
+    }
+
+    &__play {
+        display: grid;
+        flex: 0 0 44px;
+        width: 44px;
+        height: 44px;
+        padding: 0 0 0 2px;
+        place-items: center;
+        border: 0;
+        border-radius: 50%;
+        color: #2b2114;
+        background: var(--app-accent);
+        box-shadow: 0 5px 14px rgba(82, 58, 19, 0.24);
+        font-size: 17px;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+        &:hover {
+            transform: translateY(-1px) scale(1.03);
+            box-shadow: 0 7px 18px rgba(82, 58, 19, 0.3);
+        }
+    }
+
+    &__progress,
+    &__volume input {
+        accent-color: var(--app-accent);
+        cursor: pointer;
+    }
+
+    &__progress {
+        min-width: 70px;
+        flex: 1;
+    }
+
+    &__time {
+        color: var(--app-muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__volume {
+        gap: 5px;
+        color: var(--app-muted);
+
+        input {
+            width: 62px;
+        }
+    }
 }
 
-.audio-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 10px;
-    margin-left: 10px;
-    width: 40px;
-    height: 40px;
-    color: var(--app-text);
-    fill: currentColor;
-}
+.song-notes {
+    width: min(1120px, 100%);
+    margin: 28px auto 12px;
 
-.audio-player {
-    justify-content: center;
-    display: flex;
-    margin: 10px;
+    &__header,
+    &__actions {
+        display: flex;
+        align-items: center;
+    }
+
+    &__header {
+        justify-content: space-between;
+        gap: 14px;
+        margin: 0 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--app-border);
+
+        h3 {
+            margin: 0;
+            font-size: 20px;
+        }
+    }
+
+    &__actions {
+        gap: 8px;
+    }
+
+    &__fullscreen {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 40px;
+        padding: 7px 13px;
+        border: 1px solid var(--app-border);
+        border-radius: 20px;
+        color: var(--app-text);
+        background: var(--app-surface-soft);
+        font-weight: 700;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--app-hover);
+        }
+    }
 }
 
 .song-image {
@@ -1543,6 +2072,180 @@ export default {
     image-rendering: optimizeQuality;
 
     object-fit: cover;
+}
+
+.song-image--svg img {
+    background: #fff;
+}
+
+:root[data-theme='dark'] .song-image--svg img {
+    filter: invert(1) hue-rotate(180deg) brightness(1.16) contrast(0.94);
+}
+
+.notes-viewer {
+    --notes-background: #eee9df;
+    --notes-surface: rgba(255, 253, 248, 0.96);
+    --notes-control: #fffdf8;
+    --notes-text: #17130d;
+    --notes-muted: #716757;
+    --notes-border: rgba(45, 34, 19, 0.2);
+
+    position: fixed;
+    inset: 0;
+    z-index: 11000;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    color: var(--notes-text);
+    background: var(--notes-background);
+
+    &--dark {
+        --notes-background: #10151d;
+        --notes-surface: rgba(24, 31, 42, 0.97);
+        --notes-control: #252e3b;
+        --notes-text: #f6f1e7;
+        --notes-muted: #b9b0a3;
+        --notes-border: rgba(255, 255, 255, 0.16);
+    }
+
+    &__header,
+    &__toolbar,
+    &__formats,
+    &__footer {
+        display: flex;
+        align-items: center;
+    }
+
+    &__header {
+        z-index: 3;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 66px;
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--notes-border);
+        background: var(--notes-surface);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+
+        > strong {
+            overflow: hidden;
+            font-size: 17px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    &__toolbar,
+    &__formats {
+        gap: 6px;
+    }
+
+    &__toolbar button,
+    &__footer button {
+        min-width: 40px;
+        height: 40px;
+        padding: 5px 10px;
+        border: 1px solid var(--notes-border);
+        border-radius: 10px;
+        color: var(--notes-text);
+        background: var(--notes-control);
+        font-size: 18px;
+        cursor: pointer;
+
+        &:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        &.selected {
+            border-color: #d9b26f;
+            color: #271d0f;
+            background: #d9b26f;
+            font-weight: 700;
+        }
+    }
+
+    &__zoom {
+        min-width: 66px !important;
+        font-size: 13px !important;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__close {
+        border-radius: 50% !important;
+        font-size: 27px !important;
+        line-height: 1;
+    }
+
+    &__viewport {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        padding: 24px clamp(28px, 6vw, 88px);
+        scroll-behavior: smooth;
+        overscroll-behavior: contain;
+
+        img {
+            display: block;
+            max-width: none;
+            height: auto;
+            margin: 0 auto;
+            background: #fff;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
+            transition: width 0.18s ease;
+        }
+    }
+
+    &__page-button {
+        position: fixed;
+        top: 50%;
+        z-index: 4;
+        display: grid;
+        width: 48px;
+        height: 72px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid var(--notes-border);
+        color: var(--notes-text);
+        background: var(--notes-surface);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.14);
+        font-size: 38px;
+        cursor: pointer;
+        transform: translateY(-50%);
+
+        &--previous {
+            left: 10px;
+            border-radius: 0 18px 18px 0;
+        }
+
+        &--next {
+            right: 10px;
+            border-radius: 18px 0 0 18px;
+        }
+
+        &:disabled {
+            opacity: 0.22;
+            cursor: default;
+        }
+    }
+
+    &__footer {
+        z-index: 3;
+        justify-content: center;
+        gap: 14px;
+        min-height: 58px;
+        padding: 8px 16px;
+        border-top: 1px solid var(--notes-border);
+        background: var(--notes-surface);
+
+        span {
+            min-width: 76px;
+            color: var(--notes-muted);
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+    }
 }
 
 .song__buttons button[disabled] {
@@ -1672,6 +2375,10 @@ export default {
     }
 }
 
+.notes-viewer--dark.notes-viewer--svg .notes-viewer__viewport img {
+    filter: invert(1) hue-rotate(180deg) brightness(1.16) contrast(0.94);
+}
+
 @media (max-width: 560px) {
     .song {
         &__title {
@@ -1717,6 +2424,87 @@ export default {
         min-height: 38px;
         padding: 6px;
         font-size: 14px;
+    }
+
+    .song-audio {
+        grid-template-columns: 1fr;
+        gap: 13px;
+        padding: 14px;
+
+        &__controls {
+            gap: 7px;
+        }
+
+        &__volume {
+            display: none;
+        }
+
+        &__play {
+            flex-basis: 42px;
+            width: 42px;
+            height: 42px;
+        }
+    }
+
+    .song-notes {
+        &__header {
+            align-items: flex-start;
+            flex-direction: column;
+            margin-right: 12px;
+            margin-left: 12px;
+        }
+
+        &__actions {
+            width: 100%;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        &__fullscreen {
+            margin-left: auto;
+        }
+    }
+
+    .song-image {
+        margin: 14px 8px;
+    }
+
+    .notes-viewer {
+        &__header {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 7px;
+            min-height: 0;
+            padding: 8px;
+        }
+
+        &__toolbar {
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        &__toolbar button {
+            min-width: 36px;
+            height: 36px;
+        }
+
+        &__viewport {
+            padding: 14px 18px;
+        }
+
+        &__page-button {
+            width: 36px;
+            height: 58px;
+            font-size: 30px;
+
+            &--previous {
+                left: 0;
+            }
+
+            &--next {
+                right: 0;
+            }
+        }
     }
 }
 
