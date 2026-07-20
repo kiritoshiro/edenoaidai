@@ -41,18 +41,6 @@
                 </button>
 
                 <button
-                    v-if="sourceSlides.length"
-                    class="song__presenter-button"
-                    :class="{ 'is-active': presenterConnected }"
-                    :aria-label="presenterConnected ? 'Rodyti prijungtą pristatymo langą' : 'Rodyti skaidres kitame ekrane'"
-                    :title="presenterConnected ? 'Pristatymo langas prijungtas' : 'Kitas ekranas'"
-                    @click="openPresenterWindow"
-                >
-                    <span aria-hidden="true">▱</span>
-                    <span class="song__presenter-label">Kitas ekranas</span>
-                </button>
-
-                <button
                     class="song__favorite-button"
                     :class="{ 'is-active': song.favorited }"
                     :aria-label="song.favorited ? 'Pašalinti iš išsaugotų' : 'Išsaugoti giesmę'"
@@ -87,27 +75,6 @@
                 <span>{{ nextSongId || '—' }}</span>
                 <span aria-hidden="true">→</span>
             </button>
-        </div>
-        <div v-if="presenterConnected" class="song__presenter-controls">
-            <strong>Kitas ekranas</strong>
-            <button
-                type="button"
-                :disabled="slideshowIndex === 0"
-                aria-label="Ankstesnė skaidrė kitame ekrane"
-                @click="previousSlide"
-            >
-                ←
-            </button>
-            <span>{{ slideshowSlides.length ? slideshowIndex + 1 : 0 }} / {{ slideshowSlides.length }}</span>
-            <button
-                type="button"
-                :disabled="slideshowSlides.length === 0 || slideshowIndex === slideshowSlides.length - 1"
-                aria-label="Kita skaidrė kitame ekrane"
-                @click="nextSlide"
-            >
-                →
-            </button>
-            <button type="button" @click="closePresenterWindow">Uždaryti</button>
         </div>
         <p class="song__verse">
             <em>{{ song.verse }}</em>
@@ -185,6 +152,7 @@
             :class="{
                 'lyrics-show--light': slideshowTheme === 'light',
                 'lyrics-show--no-wrap': !slideshowWrapLines,
+                'lyrics-show--controller': presenterConnected,
             }"
             :style="slideshowStyle"
             role="dialog"
@@ -192,6 +160,7 @@
             aria-label="Giesmės skaidrės"
         >
             <button
+                v-if="!presenterConnected"
                 class="lyrics-show__click-zone lyrics-show__click-zone--left"
                 :disabled="slideshowSettingsOpen || slideshowIndex === 0"
                 tabindex="-1"
@@ -199,6 +168,7 @@
                 @click="previousSlide"
             ></button>
             <button
+                v-if="!presenterConnected"
                 class="lyrics-show__click-zone lyrics-show__click-zone--right"
                 :disabled="
                     slideshowSettingsOpen ||
@@ -230,6 +200,17 @@
             </button>
 
             <button
+                v-if="presenterConnected"
+                class="lyrics-show__songs-button"
+                aria-label="Atidaryti giesmių galeriją"
+                title="Giesmių galerija"
+                @click.stop="openSongGallery"
+            >
+                <span aria-hidden="true">☰</span>
+                <span class="lyrics-show__songs-label">Giesmės</span>
+            </button>
+
+            <button
                 class="lyrics-show__close"
                 aria-label="Uždaryti skaidres"
                 title="Uždaryti (Esc)"
@@ -242,12 +223,39 @@
                 <span>{{ song.songId }} {{ song.title }}</span>
             </header>
 
-            <main ref="slideshowContent" class="lyrics-show__content">
-                <span v-if="currentSlide">{{ currentSlideText }}</span>
-                <span v-else class="lyrics-show__empty">
-                    Nustatymuose pasirinkite bent vieną stulpelį.
-                </span>
-            </main>
+            <section class="lyrics-show__stage">
+                <div v-if="presenterConnected" class="lyrics-show__overview">
+                    <button
+                        v-for="(slide, index) in slideshowSlides"
+                        :key="`${song.songId}-${index}-${slide.text}`"
+                        type="button"
+                        ref="slidePreviewButtons"
+                        class="lyrics-show__preview"
+                        :class="{
+                            'is-active': index === slideshowIndex,
+                            'is-chorus': slide.isChorus,
+                        }"
+                        @click="selectSlide(index)"
+                    >
+                        <strong>{{ presentationSlideTitle(slide, index) }}</strong>
+                        <span>{{ slide.text }}</span>
+                    </button>
+                    <p v-if="slideshowSlides.length === 0" class="lyrics-show__empty">
+                        Nustatymuose pasirinkite bent vieną stulpelį.
+                    </p>
+                </div>
+                <div
+                    v-else
+                    ref="slideshowContent"
+                    class="lyrics-show__content"
+                    role="main"
+                >
+                    <span v-if="currentSlide">{{ currentSlideText }}</span>
+                    <span v-else class="lyrics-show__empty">
+                        Nustatymuose pasirinkite bent vieną stulpelį.
+                    </span>
+                </div>
+            </section>
 
             <aside
                 v-if="slideshowSettingsOpen"
@@ -447,6 +455,51 @@
                 </section>
             </aside>
 
+            <aside
+                v-if="songGalleryOpen"
+                class="lyrics-show__song-gallery"
+                aria-label="Giesmių galerija"
+                @click.stop
+            >
+                <div class="lyrics-show__settings-header">
+                    <div>
+                        <h2>Giesmės</h2>
+                        <p>Pasirinkta giesmė iš karto pasirodys kitame ekrane.</p>
+                    </div>
+                    <button
+                        type="button"
+                        aria-label="Uždaryti giesmių galeriją"
+                        @click="songGalleryOpen = false"
+                    >
+                        ×
+                    </button>
+                </div>
+                <label class="lyrics-show__song-search">
+                    <span>Ieškoti</span>
+                    <input
+                        v-model.trim="songSearch"
+                        type="search"
+                        placeholder="Numeris arba pavadinimas"
+                        autocomplete="off"
+                    />
+                </label>
+                <div class="lyrics-show__song-list">
+                    <button
+                        v-for="catalogSong in filteredSongCatalog"
+                        :key="catalogSong.songId"
+                        type="button"
+                        :class="{ 'is-active': catalogSong.songId === song.songId }"
+                        @click="selectPresentationSong(catalogSong.songId)"
+                    >
+                        <strong>{{ catalogSong.songId }}</strong>
+                        <span>{{ catalogSong.title }}</span>
+                    </button>
+                    <p v-if="filteredSongCatalog.length === 0">
+                        Giesmių nerasta.
+                    </p>
+                </div>
+            </aside>
+
             <footer class="lyrics-show__controls" @click.stop>
                 <button
                     :disabled="slideshowSlides.length === 0 || slideshowIndex === 0"
@@ -505,6 +558,13 @@ function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number(value) || 0));
 }
 
+function normalizeSearch(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('lt');
+}
+
 function slidesFromBody(body) {
     const text = lyricsToPlainText(body);
     const blocks = text
@@ -545,6 +605,7 @@ export default {
         return {
             song: null,
             songIds: [],
+            songCatalog: [],
             imageType: 'jpg',
             imageLoaded: [],
             imageErrored: [],
@@ -587,6 +648,8 @@ export default {
             overflowSettingsConfirmed: false,
             slideValidationFrame: 0,
             presenterConnected: false,
+            songGalleryOpen: false,
+            songSearch: '',
         };
     },
     computed: {
@@ -693,11 +756,17 @@ export default {
                 '--lyrics-offset-y': `${this.slideshowOffsetY}vh`,
             };
         },
+        filteredSongCatalog() {
+            const query = normalizeSearch(this.songSearch);
+            if (!query) return this.songCatalog;
+            return this.songCatalog.filter(song =>
+                normalizeSearch(`${song.songId} ${song.title}`).includes(query),
+            );
+        },
     },
     watch: {
         songId() {
-            this.closePresenterWindow();
-            this.closeSlideshow();
+            if (!this.presenterConnected) this.closeSlideshow();
             this.fetchSong();
         },
         imageUrls() {
@@ -720,34 +789,40 @@ export default {
             this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
+            this.renderPresenterWindow();
         },
         slideshowStrictSize(value) {
             localStorage.setItem('slideshowStrictSize', String(value));
             this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
+            this.renderPresenterWindow();
         },
         slideshowWrapLines(value) {
             localStorage.setItem('slideshowWrapLines', String(value));
             this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
+            this.renderPresenterWindow();
         },
         slideshowOffsetX(value) {
             localStorage.setItem('slideshowOffsetX', String(value));
             this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
+            this.renderPresenterWindow();
         },
         slideshowOffsetY(value) {
             localStorage.setItem('slideshowOffsetY', String(value));
             this.overflowSettingsConfirmed = false;
             this.scheduleSlideFit();
             this.scheduleSlideValidation();
+            this.renderPresenterWindow();
         },
         currentSlideText() {
             this.scheduleSlideFit();
             this.renderPresenterWindow();
+            this.scrollActivePreviewIntoView();
         },
         fittedSlideshowFontSize() {
             this.renderPresenterWindow();
@@ -795,6 +870,7 @@ export default {
             if (this.slideshowSettingsOpen) {
                 this.closeSlideshowSettings();
             } else {
+                this.songGalleryOpen = false;
                 this.slideshowSettingsOpen = true;
                 this.scheduleSlideValidation();
             }
@@ -809,6 +885,7 @@ export default {
             this.prepareSlideshowOptions();
             this.slideshowIndex = 0;
             this.slideshowSettingsOpen = this.slideshowSlides.length === 0;
+            this.songGalleryOpen = false;
             this.previousBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
             this.slideshowOpen = true;
@@ -833,6 +910,8 @@ export default {
             if (!this.slideshowOpen && !this.fullscreenActive) return;
             this.slideshowOpen = false;
             this.slideshowSettingsOpen = false;
+            this.songGalleryOpen = false;
+            this.closePresenterWindow();
             document.body.style.overflow = this.previousBodyOverflow;
             if (document.fullscreenElement) {
                 document.exitFullscreen().catch(() => {});
@@ -855,8 +934,32 @@ export default {
                 this.slideshowIndex + 1,
             );
         },
+        selectSlide(index) {
+            this.slideshowIndex = clamp(
+                index,
+                0,
+                Math.max(0, this.slideshowSlides.length - 1),
+            );
+        },
+        scrollActivePreviewIntoView() {
+            if (!this.presenterConnected) return;
+            this.$nextTick(() => {
+                const previews = this.$refs.slidePreviewButtons;
+                const active = Array.isArray(previews)
+                    ? previews[this.slideshowIndex]
+                    : previews;
+                active?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            });
+        },
         onSlideshowKeydown(event) {
             if (!this.slideshowOpen && !this.presenterConnected) return;
+            if (this.songGalleryOpen) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    this.songGalleryOpen = false;
+                }
+                return;
+            }
             if (this.slideshowSettingsOpen) {
                 if (event.key === 'Escape') {
                     event.preventDefault();
@@ -1112,7 +1215,7 @@ export default {
             presenterWindow.document.write(`<!doctype html>
 <html lang="lt"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Edeno Aidai – skaidrės</title><style>
-*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Avenir,Helvetica,Arial,sans-serif}body{color:#fff;background:radial-gradient(circle at 50% 45%,#263447 0,#111923 48%,#080b10 100%)}body.light{color:#17130d;background:radial-gradient(circle at 50% 45%,#fff 0,#f4efe6 58%,#e8dfd1 100%)}#stage{display:grid;grid-template-rows:76px minmax(0,1fr) 52px;width:100vw;height:100vh}#title{display:flex;align-items:center;justify-content:center;padding:12px 5vw;color:rgba(255,255,255,.72);font-size:clamp(16px,2vw,24px)}body.light #title{color:rgba(23,19,13,.68)}#area{display:grid;min-height:0;overflow:hidden}#content{align-self:center;justify-self:center;width:min(1200px,86vw);max-height:100%;overflow:hidden;padding:30px 0;font-weight:600;line-height:1.32;text-align:center;text-wrap:balance;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 3px 16px rgba(0,0,0,.55);transform:translate(var(--offset-x),var(--offset-y));pointer-events:none}body.light #content{text-shadow:0 2px 10px rgba(75,52,20,.18)}body.no-wrap #content{white-space:pre;text-wrap:nowrap;overflow-wrap:normal}#counter{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.68);font-size:18px}body.light #counter{color:rgba(23,19,13,.68)}.zone{position:fixed;top:0;bottom:0;width:50%;border:0;background:transparent;cursor:pointer}.zone.left{left:0}.zone.right{right:0}
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Avenir,Helvetica,Arial,sans-serif}body{color:#fff;background:radial-gradient(circle at 50% 45%,#263447 0,#111923 48%,#080b10 100%)}body.light{color:#17130d;background:radial-gradient(circle at 50% 45%,#fff 0,#f4efe6 58%,#e8dfd1 100%)}#stage{display:grid;grid-template-rows:76px minmax(0,1fr) 82px;width:100vw;height:100vh}#title{display:flex;align-items:center;justify-content:center;padding:12px 5vw;color:rgba(255,255,255,.72);font-size:clamp(16px,2vw,24px)}body.light #title{color:rgba(23,19,13,.68)}#area{display:grid;min-width:0;min-height:0;overflow:hidden}#content{align-self:center;justify-self:center;width:min(1200px,86vw);min-height:0;height:auto;max-height:100%;overflow:hidden;padding:30px 0;font-weight:600;line-height:1.32;text-align:center;text-wrap:balance;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 3px 16px rgba(0,0,0,.55);transform:translate(var(--offset-x),var(--offset-y));pointer-events:none}body.light #content{text-shadow:0 2px 10px rgba(75,52,20,.18)}body.no-wrap #content{white-space:pre;text-wrap:nowrap;overflow-wrap:normal}#counter{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.68);font-size:18px}body.light #counter{color:rgba(23,19,13,.68)}.zone{position:fixed;top:0;bottom:0;width:50%;border:0;background:transparent;cursor:pointer}.zone.left{left:0}.zone.right{right:0}
 </style></head><body><div id="stage"><div id="title"></div><div id="area"><div id="content"></div></div><div id="counter"></div></div><button class="zone left" aria-label="Ankstesnė skaidrė"></button><button class="zone right" aria-label="Kita skaidrė"></button></body></html>`);
             presenterWindow.document.close();
             presenterWindow.document.querySelector('.zone.left').onclick = () =>
@@ -1174,6 +1277,31 @@ export default {
             }
             presenterWindow = null;
             this.presenterConnected = false;
+            this.songGalleryOpen = false;
+            this.scheduleSlideFit();
+        },
+        openSongGallery() {
+            if (!this.presenterConnected) return;
+            this.slideshowSettingsOpen = false;
+            this.songGalleryOpen = true;
+            this.songSearch = '';
+        },
+        selectPresentationSong(songId) {
+            if (!songId) return;
+            this.songGalleryOpen = false;
+            this.songSearch = '';
+            this.slideshowIndex = 0;
+            if (songId === this.song?.songId) {
+                this.renderPresenterWindow();
+                return;
+            }
+            this.$router.push(`/song/${encodeURIComponent(songId)}`);
+        },
+        presentationSlideTitle(slide, index) {
+            const number = this.slideshowSlides
+                .slice(0, index + 1)
+                .filter(item => item.isChorus === slide.isChorus).length;
+            return slide.isChorus ? `Priegiesmis ${number}` : `Posmas ${number}`;
         },
         slideOptionTitle(slide, index) {
             const number = this.slideshowSequence
@@ -1194,6 +1322,7 @@ export default {
                 this.slideshowOpen = false;
                 this.fullscreenActive = false;
                 document.body.style.overflow = this.previousBodyOverflow;
+                this.closePresenterWindow();
             } else if (this.slideshowOpen) {
                 this.scheduleSlideFit();
             }
@@ -1215,6 +1344,10 @@ export default {
                 .toArray()
                 .then(songs => {
                     this.songIds = songs.map(song => song.songId);
+                    this.songCatalog = songs.map(song => ({
+                        songId: song.songId,
+                        title: song.title,
+                    }));
                 })
                 .catch(error => console.error(error));
         },
@@ -1225,9 +1358,15 @@ export default {
                 .first()
                 .then(song => {
                     this.song = song || null;
+                    this.slideshowIndex = 0;
                     this.slideshowOptions = [];
                     this.prepareSlideshowOptions();
                     this.resetImages();
+                    this.$nextTick(() => {
+                        this.scheduleSlideFit();
+                        this.scheduleSlideValidation();
+                        this.renderPresenterWindow();
+                    });
                 })
                 .catch(error => console.error(error));
         },
@@ -1328,25 +1467,6 @@ export default {
     background: #d9b26f;
     font-weight: 700;
     cursor: pointer;
-}
-
-.song__presenter-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 42px;
-    padding: 7px 10px;
-    border: 1px solid var(--app-border);
-    border-radius: 11px;
-    color: var(--app-text);
-    background: transparent;
-    font-weight: 700;
-    cursor: pointer;
-
-    &.is-active {
-        border-color: var(--app-accent);
-        background: var(--app-accent-soft);
-    }
 }
 
 .song__action-group {
@@ -1493,36 +1613,6 @@ export default {
         cursor: pointer;
     }
 
-    &__presenter-controls {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 9px;
-        width: fit-content;
-        max-width: 100%;
-        margin: -4px auto 14px;
-        padding: 7px 10px;
-        border: 1px solid var(--app-border);
-        border-radius: 12px;
-        background: var(--app-surface-soft);
-        font-size: 13px;
-
-        button {
-            min-height: 30px;
-            padding: 4px 9px;
-            border: 1px solid var(--app-border);
-            border-radius: 8px;
-            color: var(--app-text);
-            background: var(--app-surface);
-            cursor: pointer;
-        }
-
-        button:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-    }
-
     &__font-size-button {
         font-size: 16px;
         line-height: 1.5;
@@ -1597,15 +1687,13 @@ export default {
 
     .song__action-button,
     .song__favorite-button,
-    .song__theme-button,
-    .song__presenter-button {
+    .song__theme-button {
         min-width: 34px;
         min-height: 38px;
         padding: 5px;
     }
 
     .song__theme-label,
-    .song__presenter-label,
     .song__slideshow-label {
         display: none;
     }
@@ -1634,7 +1722,7 @@ export default {
     inset: 0;
     z-index: 10000;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: 76px minmax(0, 1fr) 82px;
     width: 100vw;
     height: 100vh;
     box-sizing: border-box;
@@ -1724,6 +1812,24 @@ export default {
         }
     }
 
+    &__songs-button {
+        position: absolute;
+        top: 18px;
+        left: 22px;
+        z-index: 4;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 0 16px;
+        border: 1px solid var(--lyrics-show-border);
+        border-radius: 24px;
+        color: var(--lyrics-show-text);
+        background: var(--lyrics-show-control);
+        font-weight: 700;
+        cursor: pointer;
+    }
+
     &__header {
         z-index: 2;
         display: flex;
@@ -1749,11 +1855,27 @@ export default {
         }
     }
 
+    &--controller &__header {
+        padding-right: 210px;
+        padding-left: 160px;
+    }
+
+    &__stage {
+        z-index: 2;
+        display: grid;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        pointer-events: none;
+    }
+
     &__content {
         z-index: 2;
         align-self: center;
         justify-self: center;
         width: min(1200px, 86vw);
+        min-height: 0;
+        height: auto;
         max-height: 100%;
         overflow: hidden;
         padding: 30px 0;
@@ -1771,6 +1893,62 @@ export default {
             var(--lyrics-offset-y, 0)
         );
         pointer-events: none;
+    }
+
+    &__overview {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        align-content: start;
+        gap: 14px;
+        width: 100%;
+        min-height: 0;
+        overflow: auto;
+        padding: 24px clamp(18px, 4vw, 56px);
+        box-sizing: border-box;
+        pointer-events: auto;
+    }
+
+    &__preview {
+        display: grid;
+        align-content: start;
+        gap: 10px;
+        min-height: 180px;
+        padding: 18px;
+        border: 1px solid var(--lyrics-show-border);
+        border-radius: 14px;
+        color: var(--lyrics-show-text);
+        background: var(--lyrics-show-panel-soft);
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.18s ease, background-color 0.18s ease,
+            transform 0.18s ease;
+
+        strong {
+            color: var(--lyrics-show-muted);
+            font-size: 14px;
+            letter-spacing: 0.03em;
+        }
+
+        span {
+            font-size: clamp(16px, 1.65vw, 24px);
+            font-weight: 600;
+            line-height: 1.3;
+            white-space: pre-line;
+        }
+
+        &:hover {
+            transform: translateY(-2px);
+        }
+
+        &.is-chorus {
+            box-shadow: inset 4px 0 #d9b26f;
+        }
+
+        &.is-active {
+            border-color: #d9b26f;
+            background: rgba(217, 178, 111, 0.18);
+            box-shadow: 0 0 0 2px rgba(217, 178, 111, 0.22);
+        }
     }
 
     &--no-wrap &__content {
@@ -1800,6 +1978,87 @@ export default {
         color: var(--lyrics-show-text);
         background: var(--lyrics-show-panel);
         box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
+    }
+
+    &__song-gallery {
+        position: absolute;
+        inset: 76px 20px 82px;
+        z-index: 7;
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 16px;
+        box-sizing: border-box;
+        overflow: hidden;
+        padding: 20px;
+        border: 1px solid var(--lyrics-show-border);
+        border-radius: 16px;
+        color: var(--lyrics-show-text);
+        background: var(--lyrics-show-panel);
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.38);
+
+        p {
+            margin: 4px 0 0;
+            color: var(--lyrics-show-muted);
+            font-size: 13px;
+        }
+    }
+
+    &__song-search {
+        display: grid;
+        gap: 6px;
+        color: var(--lyrics-show-muted);
+        font-size: 13px;
+
+        input {
+            width: 100%;
+            min-height: 44px;
+            padding: 9px 12px;
+            border: 1px solid var(--lyrics-show-border);
+            border-radius: 10px;
+            outline: none;
+            color: var(--lyrics-show-text);
+            background: var(--lyrics-show-control);
+
+            &:focus {
+                border-color: #d9b26f;
+                box-shadow: 0 0 0 3px rgba(217, 178, 111, 0.18);
+            }
+        }
+    }
+
+    &__song-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        align-content: start;
+        gap: 9px;
+        min-height: 0;
+        overflow: auto;
+        padding-right: 4px;
+
+        > button {
+            display: grid;
+            grid-template-columns: minmax(44px, auto) 1fr;
+            align-items: center;
+            gap: 11px;
+            min-height: 54px;
+            padding: 9px 11px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            color: var(--lyrics-show-text);
+            background: var(--lyrics-show-panel-soft);
+            text-align: left;
+            cursor: pointer;
+
+            strong {
+                color: #d9b26f;
+                font-variant-numeric: tabular-nums;
+            }
+
+            &.is-active {
+                border-color: #d9b26f;
+                background: rgba(217, 178, 111, 0.18);
+            }
+        }
     }
 
     &__settings-header,
@@ -2106,9 +2365,20 @@ export default {
 
 @media (max-width: 640px) {
     .lyrics-show {
+        grid-template-rows: 64px minmax(0, 1fr) 68px;
+
         &__header {
             min-height: 64px;
             padding: 10px 66px 10px 18px;
+        }
+
+        &--controller &__header {
+            overflow: hidden;
+            padding-right: 160px;
+            padding-left: 62px;
+            font-size: 14px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
 
         &__close {
@@ -2138,12 +2408,41 @@ export default {
             line-height: 36px;
         }
 
+        &__songs-button {
+            top: 10px;
+            left: 10px;
+            min-height: 42px;
+            padding: 0 12px;
+            border-radius: 21px;
+        }
+
+        &__songs-label {
+            display: none;
+        }
+
         &__settings {
             top: 62px;
             right: 8px;
             bottom: 68px;
             width: calc(100vw - 16px);
             padding: 15px;
+        }
+
+        &__song-gallery {
+            inset: 62px 8px 68px;
+            gap: 12px;
+            padding: 15px;
+        }
+
+        &__overview {
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 10px;
+            padding: 14px 10px;
+        }
+
+        &__preview {
+            min-height: 150px;
+            padding: 14px;
         }
 
         &__content {
