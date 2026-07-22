@@ -940,6 +940,7 @@ export default {
             slideshowOpen: false,
             slideshowIndex: 0,
             fullscreenActive: false,
+            preserveSlideshowOnFullscreenExit: false,
             previousBodyOverflow: '',
             slideshowSettingsOpen: false,
             slideshowTheme:
@@ -973,6 +974,7 @@ export default {
             slideValidationFrame: 0,
             headingFitFrame: 0,
             presenterConnected: false,
+            presenterOpening: false,
             phoneViewport: window.matchMedia('(max-width: 720px)').matches,
             songGalleryOpen: false,
             songSearch: '',
@@ -1340,7 +1342,7 @@ export default {
         showSlideshowSettingsDialog() {
             const dialog = this.$refs.slideshowSettingsDialog;
             if (!dialog || dialog.open) return;
-            if (typeof dialog.showModal === 'function') {
+            if (this.phoneViewport && typeof dialog.showModal === 'function') {
                 try {
                     dialog.showModal();
                     return;
@@ -1348,7 +1350,11 @@ export default {
                     // Fall back to a regular open dialog below.
                 }
             }
-            dialog.setAttribute('open', '');
+            if (typeof dialog.show === 'function') {
+                dialog.show();
+            } else {
+                dialog.setAttribute('open', '');
+            }
         },
         closeSlideshowSettings() {
             this.validateAllSlides();
@@ -1416,6 +1422,7 @@ export default {
             this.slideshowOpen = false;
             this.slideshowSettingsOpen = false;
             this.songGalleryOpen = false;
+            this.preserveSlideshowOnFullscreenExit = false;
             this.closePresenterWindow();
             document.body.style.overflow = this.previousBodyOverflow;
             if (document.fullscreenElement) {
@@ -1486,6 +1493,10 @@ export default {
             if (this.slideshowSettingsOpen) {
                 if (event.key === 'Escape') {
                     event.preventDefault();
+                    this.preserveSlideshowOnFullscreenExit = true;
+                    window.setTimeout(() => {
+                        this.preserveSlideshowOnFullscreenExit = false;
+                    }, 1000);
                     this.closeSlideshowSettings();
                 }
                 return;
@@ -1744,12 +1755,14 @@ export default {
             this.prepareSlideshowOptions();
             this.validateAllSlides();
 
+            this.presenterOpening = true;
             presenterWindow = window.open(
                 '',
                 'edeno-aidai-presenter',
                 'popup=yes,width=1280,height=720,left=40,top=40',
             );
             if (!presenterWindow) {
+                this.presenterOpening = false;
                 window.alert('Naršyklė užblokavo pristatymo langą. Leiskite iššokančius langus ir bandykite dar kartą.');
                 return;
             }
@@ -1757,6 +1770,9 @@ export default {
             this.initializePresenterWindow();
             this.presenterConnected = true;
             this.renderPresenterWindow();
+            window.setTimeout(() => {
+                this.presenterOpening = false;
+            }, 1000);
 
             if (presenterPollTimer) window.clearInterval(presenterPollTimer);
             presenterPollTimer = window.setInterval(() => {
@@ -1859,6 +1875,7 @@ export default {
             }
             presenterWindow = null;
             this.presenterConnected = false;
+            this.presenterOpening = false;
             this.songGalleryOpen = false;
             this.scheduleSlideFit();
         },
@@ -1907,7 +1924,11 @@ export default {
             this.fullscreenActive = Boolean(document.fullscreenElement);
 
             if (wasFullscreen && !this.fullscreenActive && this.slideshowOpen) {
-                if (this.slideshowSettingsOpen) {
+                if (this.preserveSlideshowOnFullscreenExit) {
+                    this.preserveSlideshowOnFullscreenExit = false;
+                } else if (this.presenterOpening) {
+                    this.presenterOpening = false;
+                } else if (this.slideshowSettingsOpen) {
                     this.closeSlideshowSettings();
                     this.$nextTick(() => this.enterSlideshowFullscreen());
                 } else {
@@ -3619,6 +3640,7 @@ export default {
         top: 76px;
         right: 20px;
         bottom: 82px;
+        left: auto;
         z-index: 6;
         width: min(520px, calc(100vw - 40px));
         max-width: none;
