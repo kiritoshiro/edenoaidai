@@ -307,9 +307,11 @@ function normalize_song_slides(mixed $value): array
             continue;
         }
         $isChorus = (bool) ($entry['isChorus'] ?? false);
+        $chorusPart = $isChorus && (bool) ($entry['chorusPart'] ?? false);
         $slides[] = [
             'text' => mb_substr($text, 0, 20000),
             'isChorus' => $isChorus,
+            'chorusPart' => $chorusPart,
             'chorusAfter' => !$isChorus && ($entry['chorusAfter'] ?? true) !== false,
         ];
     }
