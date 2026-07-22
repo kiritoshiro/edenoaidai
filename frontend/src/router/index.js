@@ -12,6 +12,16 @@ const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
     linkActiveClass: 'is-active',
     scrollBehavior(to, from, savedPosition) {
+        // Opening or closing the fullscreen sheet-music viewer only changes
+        // route state; keep the song page exactly where it was underneath.
+        if (
+            to.name === 'single' &&
+            from.name === 'single' &&
+            to.params.songId === from.params.songId &&
+            to.query.notes !== from.query.notes
+        ) {
+            return false;
+        }
         // Returning from a song to a list: List.vue centres the song itself
         if (from.name === 'single' && LIST_VIEWS.includes(to.name)) return false;
         if (savedPosition) return savedPosition;

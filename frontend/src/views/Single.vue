@@ -101,15 +101,15 @@
                     <song-icon :name="selectedAudioType" />
                 </div>
                 <label v-if="audioTypes.length > 1" class="song-audio__version">
-                    <span id="song-audio-title">Klausytis</span>
-                    <select v-model="selectedAudioType">
+                    <span id="song-audio-title">Giesmės garso įrašas</span>
+                    <select v-model="selectedAudioType" aria-label="Įrašo versija">
                         <option v-for="type in audioTypes" :key="type" :value="type">
                             {{ audioTypeLabel(type) }}
                         </option>
                     </select>
                 </label>
                 <div v-else class="song-audio__version song-audio__version--single">
-                    <span id="song-audio-title">Klausytis</span>
+                    <span id="song-audio-title">Giesmės garso įrašas</span>
                     <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
                 </div>
             </div>
@@ -135,21 +135,26 @@
                     :aria-label="audioPlaying ? 'Pristabdyti įrašą' : 'Paleisti įrašą'"
                     @click="toggleAudio"
                 >
-                    {{ audioPlaying ? '❚❚' : '▶' }}
+                    <span aria-hidden="true">{{ audioPlaying ? '❚❚' : '▶' }}</span>
+                    <span>{{ audioPlaying ? 'Pristabdyti' : 'Klausyti' }}</span>
                 </button>
-                <span class="song-audio__time">{{ formatMediaTime(audioCurrentTime) }}</span>
-                <input
-                    class="song-audio__progress"
-                    type="range"
-                    min="0"
-                    :max="audioDuration || 0"
-                    step="0.1"
-                    :value="audioCurrentTime"
-                    :disabled="!audioDuration"
-                    aria-label="Įrašo pozicija"
-                    @input="seekAudio"
-                />
-                <span class="song-audio__time">{{ formatMediaTime(audioDuration) }}</span>
+                <div class="song-audio__timeline">
+                    <input
+                        class="song-audio__progress"
+                        type="range"
+                        min="0"
+                        :max="audioDuration || 0"
+                        step="0.1"
+                        :value="audioCurrentTime"
+                        :disabled="!audioDuration"
+                        aria-label="Įrašo pozicija"
+                        @input="seekAudio"
+                    />
+                    <div class="song-audio__times" aria-hidden="true">
+                        <span class="song-audio__time">{{ formatMediaTime(audioCurrentTime) }}</span>
+                        <span class="song-audio__time">{{ formatMediaTime(audioDuration) }}</span>
+                    </div>
+                </div>
                 <label class="song-audio__volume" title="Garsumas">
                     <span aria-hidden="true">♪</span>
                     <input
@@ -809,6 +814,7 @@ import { appTheme, toggleAppTheme } from '../lib/theme';
 import SongIcon from '../components/SongIcon.vue';
 
 const MAX_SLIDESHOW_FONT_SIZE = 320;
+const DEFAULT_LYRICS_FONT_SIZE = 22;
 let presenterWindow = null;
 let presenterPollTimer = null;
 
@@ -868,6 +874,8 @@ export default {
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
+            notesHistoryOwned: false,
+            notesOpening: false,
             notesVisible: localStorage.getItem('notesVisible') === 'true',
             notesPageIndex: 0,
             notesZoom: 1,
@@ -878,7 +886,9 @@ export default {
             audioDuration: 0,
             audioVolume: 0.85,
             trackLabels: {},
-            fontSize: parseInt(localStorage.getItem('fontSize'), 10) || 24,
+            fontSize:
+                parseInt(localStorage.getItem('fontSize'), 10) ||
+                DEFAULT_LYRICS_FONT_SIZE,
             slideshowOpen: false,
             slideshowIndex: 0,
             fullscreenActive: false,
@@ -930,7 +940,9 @@ export default {
             return { fontSize: `${this.fontSize}px` };
         },
         fontSizePercent() {
-            return Math.round((this.fontSize / 24) * 100);
+            return Math.round(
+                (this.fontSize / DEFAULT_LYRICS_FONT_SIZE) * 100,
+            );
         },
         audioTypes() {
             return Array.isArray(this.song?.lists)
@@ -1099,6 +1111,14 @@ export default {
         },
     },
     watch: {
+        '$route.query.notes'(value) {
+            if (value === 'fullscreen') {
+                this.showNotesFullscreen();
+            } else {
+                this.notesHistoryOwned = false;
+                this.finishCloseNotesFullscreen();
+            }
+        },
         songId() {
             this.closeNotesFullscreen();
             this.resetAudioState();
@@ -1249,7 +1269,7 @@ export default {
         }
         this.closePresenterWindow();
         this.closeSlideshow();
-        this.closeNotesFullscreen();
+        this.finishCloseNotesFullscreen();
         this.resetAudioState();
     },
     methods: {
@@ -1508,15 +1528,15 @@ export default {
             const compact = window.matchMedia('(max-width: 680px)').matches;
             this.fitHeadingElement(
                 this.$refs.songTitle,
-                compact ? 20 : 28,
-                compact ? 38 : 45,
-                compact ? 28 : 34,
+                compact ? 18 : 25,
+                compact ? 34 : 40,
+                compact ? 26 : 32,
             );
             this.fitHeadingElement(
                 this.$refs.songVerse,
                 compact ? 12 : 13,
-                compact ? 18 : 17,
-                15,
+                16,
+                compact ? 14 : 15,
             );
         },
         fitCurrentSlide() {
@@ -1821,8 +1841,34 @@ export default {
         noteFormatLabel(format) {
             return format === 'svg' ? 'SVG' : 'JPG';
         },
-        openNotesFullscreen() {
-            if (!this.currentNotePageUrl) return;
+        async openNotesFullscreen() {
+            if (
+                !this.currentNotePageUrl ||
+                this.notesFullscreenOpen ||
+                this.notesOpening
+            ) {
+                return;
+            }
+            if (this.$route.query.notes === 'fullscreen') {
+                this.showNotesFullscreen();
+                return;
+            }
+
+            this.notesOpening = true;
+            try {
+                await this.$router.push({
+                    query: {
+                        ...this.$route.query,
+                        notes: 'fullscreen',
+                    },
+                });
+                this.notesHistoryOwned = true;
+            } finally {
+                this.notesOpening = false;
+            }
+        },
+        showNotesFullscreen() {
+            if (!this.currentNotePageUrl || this.notesFullscreenOpen) return;
             this.previousNotesBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
             this.notesPageIndex = 0;
@@ -1831,6 +1877,20 @@ export default {
             this.$nextTick(() => this.resetNotesViewport());
         },
         closeNotesFullscreen() {
+            if (!this.notesFullscreenOpen) return;
+            if (this.$route.query.notes === 'fullscreen') {
+                if (this.notesHistoryOwned) {
+                    this.$router.back();
+                } else {
+                    const query = { ...this.$route.query };
+                    delete query.notes;
+                    this.$router.replace({ query });
+                }
+                return;
+            }
+            this.finishCloseNotesFullscreen();
+        },
+        finishCloseNotesFullscreen() {
             if (!this.notesFullscreenOpen) return;
             this.notesFullscreenOpen = false;
             document.body.style.overflow = this.previousNotesBodyOverflow;
@@ -2042,7 +2102,7 @@ export default {
 
 .song-audio {
     display: grid;
-    grid-template-columns: minmax(180px, 0.8fr) minmax(300px, 1.5fr);
+    grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.5fr);
     align-items: center;
     gap: 18px;
     width: min(760px, calc(100% - 28px));
@@ -2055,6 +2115,7 @@ export default {
 
     &__header,
     &__controls,
+    &__times,
     &__version,
     &__volume {
         display: flex;
@@ -2134,24 +2195,30 @@ export default {
 
     &__controls {
         min-width: 0;
-        gap: 9px;
+        gap: 11px;
     }
 
     &__play {
-        display: grid;
-        flex: 0 0 44px;
-        width: 44px;
+        display: inline-flex;
+        min-width: 112px;
         height: 44px;
-        padding: 0 0 0 2px;
-        place-items: center;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 14px;
         border: 0;
-        border-radius: 50%;
+        border-radius: 12px;
         color: #2b2114;
         background: var(--app-accent);
         box-shadow: 0 5px 14px rgba(82, 58, 19, 0.24);
-        font-size: 17px;
+        font-size: 14px;
+        font-weight: 800;
         cursor: pointer;
         transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+        span:first-child {
+            font-size: 13px;
+        }
 
         &:hover {
             transform: translateY(-1px) scale(1.03);
@@ -2166,8 +2233,20 @@ export default {
     }
 
     &__progress {
-        min-width: 70px;
+        width: 100%;
+        min-width: 60px;
+        margin: 0;
+    }
+
+    &__timeline {
+        display: grid;
+        min-width: 0;
         flex: 1;
+        gap: 2px;
+    }
+
+    &__times {
+        justify-content: space-between;
     }
 
     &__time {
@@ -2503,7 +2582,7 @@ export default {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         color: var(--app-accent-strong);
         line-height: 1;
     }
@@ -2519,14 +2598,14 @@ export default {
 
     &__number-value {
         font-family: Georgia, 'Times New Roman', serif;
-        font-size: clamp(50px, 9vw, 70px);
+        font-size: clamp(42px, 7vw, 58px);
         font-weight: 600;
         letter-spacing: -0.04em;
     }
 
     h1 {
         display: grid;
-        height: clamp(78px, 9vw, 94px);
+        height: clamp(68px, 8vw, 84px);
         place-items: center;
         overflow: hidden;
         margin: 0;
@@ -2539,12 +2618,12 @@ export default {
 
     &__verse {
         display: flex;
-        height: 48px;
+        height: 44px;
         align-items: center;
         justify-content: center;
         max-width: 610px;
         overflow: hidden;
-        margin: 10px auto 0;
+        margin: 8px auto 0;
         color: var(--app-muted);
         font-family: Georgia, 'Times New Roman', serif;
         font-size: 16px;
@@ -2946,9 +3025,10 @@ export default {
         }
 
         &__play {
-            flex-basis: 42px;
-            width: 42px;
+            min-width: 104px;
+            width: auto;
             height: 42px;
+            padding: 0 12px;
         }
     }
 
@@ -3001,21 +3081,21 @@ export default {
     }
 
     .song-heading {
-        margin-bottom: 14px;
+        margin-bottom: 12px;
         padding: 0 8px;
 
         &__number {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         h1 {
-            height: 74px;
-            font-size: 32px;
+            height: 64px;
+            font-size: 29px;
         }
 
         &__verse {
-            height: 54px;
-            font-size: 16px;
+            height: 48px;
+            font-size: 15px;
         }
     }
 
