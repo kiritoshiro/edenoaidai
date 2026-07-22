@@ -510,6 +510,79 @@
                     <p v-if="slideshowSlides.length === 0" class="lyrics-show__empty">
                         Nustatymuose pasirinkite bent vieną stulpelį.
                     </p>
+
+                    <section
+                        v-if="audioTypes.length"
+                        class="lyrics-show__audio"
+                        aria-label="Giesmės garso įrašas"
+                    >
+                        <div class="lyrics-show__audio-heading">
+                            <div>
+                                <small>Garso įrašas</small>
+                                <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
+                            </div>
+                            <select
+                                v-if="audioTypes.length > 1"
+                                v-model="selectedAudioType"
+                                aria-label="Įrašo versija"
+                            >
+                                <option
+                                    v-for="type in audioTypes"
+                                    :key="type"
+                                    :value="type"
+                                >
+                                    {{ audioTypeLabel(type) }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="lyrics-show__audio-controls">
+                            <button
+                                type="button"
+                                class="lyrics-show__audio-play"
+                                :aria-label="
+                                    audioPlaying
+                                        ? 'Pristabdyti įrašą'
+                                        : 'Paleisti įrašą'
+                                "
+                                @click="toggleAudio"
+                            >
+                                <span aria-hidden="true">
+                                    {{ audioPlaying ? '❚❚' : '▶' }}
+                                </span>
+                                {{ audioPlaying ? 'Pristabdyti' : 'Paleisti' }}
+                            </button>
+                            <span class="lyrics-show__audio-time">
+                                {{ formatMediaTime(audioCurrentTime) }}
+                            </span>
+                            <input
+                                class="lyrics-show__audio-progress"
+                                type="range"
+                                min="0"
+                                :max="audioDuration || 0"
+                                step="0.1"
+                                :value="audioCurrentTime"
+                                :disabled="!audioDuration"
+                                aria-label="Įrašo pozicija"
+                                @input="seekAudio"
+                            />
+                            <span class="lyrics-show__audio-time">
+                                {{ formatMediaTime(audioDuration) }}
+                            </span>
+                            <label class="lyrics-show__audio-volume" title="Garsumas">
+                                <span aria-hidden="true">♪</span>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    :value="audioVolume"
+                                    aria-label="Garsumas"
+                                    @input="setAudioVolume"
+                                />
+                            </label>
+                        </div>
+                    </section>
                 </div>
                 <div
                     v-else
@@ -528,12 +601,29 @@
                 v-if="slideshowSettingsOpen"
                 ref="slideshowSettingsDialog"
                 class="lyrics-show__settings"
+                :style="slideshowSettingsStyle"
                 aria-label="Skaidrių nustatymai"
                 @cancel.prevent="closeSlideshowSettings"
                 @click.stop
             >
-                <div class="lyrics-show__settings-header">
-                    <h2>Skaidrių nustatymai</h2>
+                <div
+                    class="lyrics-show__settings-header"
+                    :class="{
+                        'lyrics-show__settings-header--dragging':
+                            slideshowSettingsDragging,
+                    }"
+                    @pointerdown="startSlideshowSettingsDrag"
+                >
+                    <div class="lyrics-show__settings-heading">
+                        <span
+                            v-if="!phoneViewport"
+                            class="lyrics-show__drag-mark"
+                            aria-hidden="true"
+                        >
+                            ⠿
+                        </span>
+                        <h2>Skaidrių nustatymai</h2>
+                    </div>
                     <button
                         type="button"
                         aria-label="Uždaryti nustatymus"
@@ -943,6 +1033,11 @@ export default {
             preserveSlideshowOnFullscreenExit: false,
             previousBodyOverflow: '',
             slideshowSettingsOpen: false,
+            slideshowSettingsX: null,
+            slideshowSettingsY: null,
+            slideshowSettingsDragging: false,
+            slideshowSettingsDragOffsetX: 0,
+            slideshowSettingsDragOffsetY: 0,
             slideshowTheme:
                 localStorage.getItem('slideshowTheme') === 'dark'
                     ? 'dark'
@@ -1143,6 +1238,21 @@ export default {
                 '--lyrics-offset-y': `${this.slideshowOffsetY}vh`,
             };
         },
+        slideshowSettingsStyle() {
+            if (
+                this.phoneViewport ||
+                this.slideshowSettingsX === null ||
+                this.slideshowSettingsY === null
+            ) {
+                return {};
+            }
+            return {
+                top: `${this.slideshowSettingsY}px`,
+                right: 'auto',
+                bottom: 'auto',
+                left: `${this.slideshowSettingsX}px`,
+            };
+        },
         measurementStyle() {
             return {
                 '--lyrics-font-size': `${this.slideshowFontSize}px`,
@@ -1320,6 +1430,7 @@ export default {
         if (this.slideValidationFrame) {
             window.cancelAnimationFrame(this.slideValidationFrame);
         }
+        this.stopSlideshowSettingsDrag();
         this.closePresenterWindow();
         this.closeSlideshow();
         this.finishCloseNotesFullscreen();
@@ -1356,8 +1467,87 @@ export default {
                 dialog.setAttribute('open', '');
             }
         },
+        startSlideshowSettingsDrag(event) {
+            if (
+                this.phoneViewport ||
+                event.button !== 0 ||
+                event.target.closest('button, input, select, textarea, a')
+            ) {
+                return;
+            }
+            const dialog = this.$refs.slideshowSettingsDialog;
+            if (!dialog) return;
+
+            const rect = dialog.getBoundingClientRect();
+            event.preventDefault();
+            this.slideshowSettingsX = rect.left;
+            this.slideshowSettingsY = rect.top;
+            this.slideshowSettingsDragOffsetX = event.clientX - rect.left;
+            this.slideshowSettingsDragOffsetY = event.clientY - rect.top;
+            this.slideshowSettingsDragging = true;
+            window.addEventListener('pointermove', this.moveSlideshowSettings);
+            window.addEventListener('pointerup', this.stopSlideshowSettingsDrag);
+            window.addEventListener(
+                'pointercancel',
+                this.stopSlideshowSettingsDrag,
+            );
+        },
+        moveSlideshowSettings(event) {
+            if (!this.slideshowSettingsDragging) return;
+            const dialog = this.$refs.slideshowSettingsDialog;
+            if (!dialog) return;
+
+            event.preventDefault();
+            const rect = dialog.getBoundingClientRect();
+            const maxX = Math.max(8, window.innerWidth - rect.width - 8);
+            const maxY = Math.max(8, window.innerHeight - rect.height - 8);
+            this.slideshowSettingsX = clamp(
+                event.clientX - this.slideshowSettingsDragOffsetX,
+                8,
+                maxX,
+            );
+            this.slideshowSettingsY = clamp(
+                event.clientY - this.slideshowSettingsDragOffsetY,
+                8,
+                maxY,
+            );
+        },
+        stopSlideshowSettingsDrag() {
+            this.slideshowSettingsDragging = false;
+            window.removeEventListener('pointermove', this.moveSlideshowSettings);
+            window.removeEventListener('pointerup', this.stopSlideshowSettingsDrag);
+            window.removeEventListener(
+                'pointercancel',
+                this.stopSlideshowSettingsDrag,
+            );
+        },
+        clampSlideshowSettingsPosition() {
+            if (
+                this.phoneViewport ||
+                this.slideshowSettingsX === null ||
+                this.slideshowSettingsY === null
+            ) {
+                return;
+            }
+            this.$nextTick(() => {
+                const dialog = this.$refs.slideshowSettingsDialog;
+                if (!dialog) return;
+                const rect = dialog.getBoundingClientRect();
+                this.slideshowSettingsX = clamp(
+                    this.slideshowSettingsX,
+                    8,
+                    Math.max(8, window.innerWidth - rect.width - 8),
+                );
+                this.slideshowSettingsY = clamp(
+                    this.slideshowSettingsY,
+                    8,
+                    Math.max(8, window.innerHeight - rect.height - 8),
+                );
+            });
+        },
         closeSlideshowSettings() {
             this.validateAllSlides();
+            this.stopSlideshowSettingsDrag();
             const dialog = this.$refs.slideshowSettingsDialog;
             if (dialog?.open && typeof dialog.close === 'function') {
                 dialog.close();
@@ -1385,6 +1575,8 @@ export default {
             if (this.sourceSlides.length === 0) return;
             this.prepareSlideshowOptions();
             this.slideshowIndex = 0;
+            this.slideshowSettingsX = null;
+            this.slideshowSettingsY = null;
             this.slideshowSettingsOpen = this.slideshowSlides.length === 0;
             this.songGalleryOpen = false;
             this.previousBodyOverflow = document.body.style.overflow;
@@ -1483,6 +1675,12 @@ export default {
                 return;
             }
             if (!this.slideshowOpen && !this.presenterConnected) return;
+            if (
+                event.key !== 'Escape' &&
+                event.target.closest?.('.lyrics-show__audio')
+            ) {
+                return;
+            }
             if (this.songGalleryOpen) {
                 if (event.key === 'Escape') {
                     event.preventDefault();
@@ -1885,6 +2083,13 @@ export default {
                 this.closePresenterWindow();
             }
             this.phoneViewport = isPhone;
+            if (isPhone) {
+                this.stopSlideshowSettingsDrag();
+                this.slideshowSettingsX = null;
+                this.slideshowSettingsY = null;
+            } else {
+                this.clampSlideshowSettingsPosition();
+            }
         },
         openSongGallery() {
             if (!this.presenterConnected) return;
@@ -3623,6 +3828,103 @@ export default {
         }
     }
 
+    &__audio {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 16px;
+        min-width: 0;
+        padding: 18px 20px;
+        border: 1px solid var(--lyrics-show-border);
+        border-radius: 14px;
+        color: var(--lyrics-show-text);
+        background: var(--lyrics-show-panel);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+    }
+
+    &__audio-heading,
+    &__audio-controls,
+    &__audio-volume {
+        display: flex;
+        align-items: center;
+    }
+
+    &__audio-heading {
+        justify-content: space-between;
+        gap: 16px;
+
+        small,
+        strong {
+            display: block;
+        }
+
+        small {
+            margin-bottom: 3px;
+            color: var(--lyrics-show-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+
+        strong {
+            font-size: 17px;
+        }
+
+        select {
+            min-width: min(260px, 45vw);
+            height: 42px;
+            padding: 7px 34px 7px 11px;
+            border: 1px solid var(--lyrics-show-border);
+            border-radius: 10px;
+            color: var(--lyrics-show-text);
+            background: var(--lyrics-show-control);
+        }
+    }
+
+    &__audio-controls {
+        gap: 10px;
+        min-width: 0;
+    }
+
+    &__audio-play {
+        display: inline-flex;
+        min-width: 126px;
+        height: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 15px;
+        border: 1px solid #d9b26f;
+        border-radius: 22px;
+        color: #24190b;
+        background: #d9b26f;
+        font-weight: 800;
+        cursor: pointer;
+    }
+
+    &__audio-progress {
+        min-width: 100px;
+        flex: 1;
+        accent-color: #d9b26f;
+    }
+
+    &__audio-time {
+        min-width: 40px;
+        color: var(--lyrics-show-muted);
+        font-size: 13px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__audio-volume {
+        gap: 6px;
+        color: var(--lyrics-show-muted);
+
+        input {
+            width: 92px;
+            accent-color: #d9b26f;
+        }
+    }
+
     &--no-wrap &__content {
         white-space: pre;
         text-wrap: nowrap;
@@ -3643,10 +3945,15 @@ export default {
         left: auto;
         z-index: 6;
         width: min(520px, calc(100vw - 40px));
+        height: calc(100vh - 158px);
+        height: calc(100dvh - 158px);
         max-width: none;
         max-height: none;
         box-sizing: border-box;
-        overflow: auto;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
         margin: 0;
         padding: 20px;
         border: 1px solid var(--lyrics-show-border);
@@ -3874,6 +4181,13 @@ export default {
         padding: 16px 20px 12px;
         border-bottom: 1px solid var(--lyrics-show-border);
         background: var(--lyrics-show-panel);
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+
+        &--dragging {
+            cursor: grabbing;
+        }
 
         h2 {
             margin: 0;
@@ -3890,6 +4204,19 @@ export default {
             font-size: 25px;
             cursor: pointer;
         }
+    }
+
+    &__settings-heading {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 9px;
+    }
+
+    &__drag-mark {
+        color: var(--lyrics-show-muted);
+        font-size: 22px;
+        line-height: 1;
     }
 
     &__defaults-button {
@@ -4135,6 +4462,8 @@ export default {
             right: 8px;
             bottom: 68px;
             width: calc(100vw - 16px);
+            height: calc(100vh - 130px);
+            height: calc(100dvh - 130px);
             padding: 15px;
         }
 
@@ -4142,6 +4471,8 @@ export default {
             top: -15px;
             margin: -15px -15px 0;
             padding: 13px 15px 10px;
+            cursor: default;
+            touch-action: auto;
         }
 
         &__song-gallery {
