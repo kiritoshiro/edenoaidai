@@ -22,6 +22,15 @@ const router = createRouter({
         ) {
             return false;
         }
+        // Previous/next hymn navigation should keep the controls under the
+        // user's finger instead of jumping the document back to the top.
+        if (
+            to.name === 'single' &&
+            from.name === 'single' &&
+            to.params.songId !== from.params.songId
+        ) {
+            return false;
+        }
         // Returning from a song to a list: List.vue centres the song itself
         if (from.name === 'single' && LIST_VIEWS.includes(to.name)) return false;
         if (savedPosition) return savedPosition;

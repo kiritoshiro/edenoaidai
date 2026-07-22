@@ -234,10 +234,14 @@
                 <button
                     type="button"
                     class="song-notes__fullscreen"
+                    aria-label="Padidinti natas ir atidaryti per visą ekraną"
                     @click="openNotesFullscreen"
                 >
-                    <span aria-hidden="true">⛶</span>
-                    Per visą ekraną
+                    <span class="song-notes__fullscreen-icon" aria-hidden="true">⛶</span>
+                    <span class="song-notes__fullscreen-copy">
+                        <strong>Padidinti natas</strong>
+                        <small>Atidaryti per visą ekraną</small>
+                    </span>
                 </button>
             </div>
 
@@ -815,11 +819,47 @@ import SongIcon from '../components/SongIcon.vue';
 
 const MAX_SLIDESHOW_FONT_SIZE = 320;
 const DEFAULT_LYRICS_FONT_SIZE = 22;
+const MOBILE_LYRICS_FONT_SIZE = 20;
+const DEFAULT_SLIDESHOW_FONT_SIZE = 36;
 let presenterWindow = null;
 let presenterPollTimer = null;
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+function initialLyricsFontSize() {
+    const stored = parseInt(localStorage.getItem('fontSize'), 10);
+    const compact = window.matchMedia('(max-width: 720px)').matches;
+    const migrationKey = 'mobileLyricsDefault20';
+
+    if (compact && localStorage.getItem(migrationKey) !== 'true') {
+        localStorage.setItem(migrationKey, 'true');
+        if (!stored || [DEFAULT_LYRICS_FONT_SIZE, 24].includes(stored)) {
+            localStorage.setItem('fontSize', String(MOBILE_LYRICS_FONT_SIZE));
+            return MOBILE_LYRICS_FONT_SIZE;
+        }
+    }
+
+    return stored || (compact ? MOBILE_LYRICS_FONT_SIZE : DEFAULT_LYRICS_FONT_SIZE);
+}
+
+function initialSlideshowFontSize() {
+    const stored = parseInt(localStorage.getItem('slideshowFontSize'), 10);
+    const migrationKey = 'slideshowDefault36';
+
+    if (localStorage.getItem(migrationKey) !== 'true') {
+        localStorage.setItem(migrationKey, 'true');
+        if (!stored || stored === 56) {
+            localStorage.setItem(
+                'slideshowFontSize',
+                String(DEFAULT_SLIDESHOW_FONT_SIZE),
+            );
+            return DEFAULT_SLIDESHOW_FONT_SIZE;
+        }
+    }
+
+    return stored || DEFAULT_SLIDESHOW_FONT_SIZE;
 }
 
 function normalizeSearch(value) {
@@ -886,9 +926,7 @@ export default {
             audioDuration: 0,
             audioVolume: 0.85,
             trackLabels: {},
-            fontSize:
-                parseInt(localStorage.getItem('fontSize'), 10) ||
-                DEFAULT_LYRICS_FONT_SIZE,
+            fontSize: initialLyricsFontSize(),
             slideshowOpen: false,
             slideshowIndex: 0,
             fullscreenActive: false,
@@ -898,14 +936,12 @@ export default {
                 localStorage.getItem('slideshowTheme') === 'dark'
                     ? 'dark'
                     : 'light',
-            slideshowFontSize: Math.min(
+            slideshowFontSize: clamp(
+                initialSlideshowFontSize(),
+                8,
                 MAX_SLIDESHOW_FONT_SIZE,
-                Math.max(
-                    8,
-                    parseInt(localStorage.getItem('slideshowFontSize'), 10) || 56,
-                ),
             ),
-            fittedSlideshowFontSize: 56,
+            fittedSlideshowFontSize: DEFAULT_SLIDESHOW_FONT_SIZE,
             slideshowFontLimit: MAX_SLIDESHOW_FONT_SIZE,
             slideshowOptions: [],
             advancedSettingsOpen: false,
@@ -940,8 +976,11 @@ export default {
             return { fontSize: `${this.fontSize}px` };
         },
         fontSizePercent() {
+            const defaultSize = this.phoneViewport
+                ? MOBILE_LYRICS_FONT_SIZE
+                : DEFAULT_LYRICS_FONT_SIZE;
             return Math.round(
-                (this.fontSize / DEFAULT_LYRICS_FONT_SIZE) * 100,
+                (this.fontSize / defaultSize) * 100,
             );
         },
         audioTypes() {
@@ -1162,7 +1201,7 @@ export default {
         slideshowFontSize(value) {
             const normalized = Math.min(
                 MAX_SLIDESHOW_FONT_SIZE,
-                Math.max(4, Number(value) || 56),
+                Math.max(4, Number(value) || DEFAULT_SLIDESHOW_FONT_SIZE),
             );
             localStorage.setItem('slideshowFontSize', String(normalized));
             this.scheduleSlideFit();
@@ -1291,7 +1330,7 @@ export default {
         },
         resetSlideshowSettings() {
             this.slideshowTheme = 'light';
-            this.slideshowFontSize = 56;
+            this.slideshowFontSize = DEFAULT_SLIDESHOW_FONT_SIZE;
             this.slideshowStrictSize = false;
             this.slideshowWrapLines = true;
             this.slideshowOffsetX = 0;
@@ -1448,7 +1487,11 @@ export default {
         adjustSlideshowFontSize(delta) {
             const current = Math.min(
                 MAX_SLIDESHOW_FONT_SIZE,
-                Math.max(4, Number(this.slideshowFontSize) || 56),
+                Math.max(
+                    4,
+                    Number(this.slideshowFontSize) ||
+                        DEFAULT_SLIDESHOW_FONT_SIZE,
+                ),
             );
             this.slideshowFontSize = Math.min(
                 MAX_SLIDESHOW_FONT_SIZE,
@@ -1543,7 +1586,11 @@ export default {
             const content = this.$refs.slideshowContent;
             const preferred = Math.min(
                 MAX_SLIDESHOW_FONT_SIZE,
-                Math.max(4, Number(this.slideshowFontSize) || 56),
+                Math.max(
+                    4,
+                    Number(this.slideshowFontSize) ||
+                        DEFAULT_SLIDESHOW_FONT_SIZE,
+                ),
             );
             if (!content || !this.currentSlide) {
                 this.fittedSlideshowFontSize = preferred;
@@ -2907,20 +2954,45 @@ export default {
 
     &__fullscreen {
         display: inline-flex;
-        min-height: 48px;
+        min-height: 54px;
         align-items: center;
         align-self: center;
-        gap: 7px;
-        padding: 0 14px;
+        gap: 9px;
+        padding: 7px 14px;
         border: 0;
         border-radius: 11px;
         color: var(--app-text);
         background: var(--app-surface-soft);
-        font-weight: 750;
+        text-align: left;
         cursor: pointer;
 
         &:hover {
             background: var(--app-hover);
+        }
+    }
+
+    &__fullscreen-icon {
+        font-size: 21px;
+        line-height: 1;
+    }
+
+    &__fullscreen-copy {
+        strong,
+        small {
+            display: block;
+        }
+
+        strong {
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        small {
+            margin-top: 2px;
+            color: var(--app-muted);
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
         }
     }
 
@@ -3398,7 +3470,7 @@ export default {
         overflow: visible;
         padding: 30px clamp(18px, 4vw, 72px);
         box-sizing: border-box;
-        font-size: var(--lyrics-font-size, 56px);
+        font-size: var(--lyrics-font-size, 36px);
         font-weight: 600;
         line-height: 1.32;
         text-align: center;
@@ -4041,7 +4113,7 @@ export default {
         overflow: hidden;
         padding: 30px clamp(18px, 4vw, 72px);
         box-sizing: border-box;
-        font-size: var(--lyrics-font-size, 56px);
+        font-size: var(--lyrics-font-size, 36px);
         font-weight: 600;
         line-height: 1.32;
         text-align: center;
