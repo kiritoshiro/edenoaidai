@@ -2058,8 +2058,8 @@ body.light #counter{color:rgba(23,19,13,.68)}
 .zone{position:fixed;top:0;bottom:0;z-index:5;width:clamp(96px,14vw,260px);padding:0;border:0;color:rgba(255,255,255,.72);background:transparent;cursor:pointer;transition:background .18s ease}
 .zone::after{position:absolute;top:50%;opacity:0;font-size:54px;font-weight:300;transform:translateY(-50%);transition:opacity .18s ease,transform .18s ease}
 .zone:hover::after{opacity:.82}
-.zone.left{left:0}.zone.left::after{content:'‹';left:20px}.zone.left:hover{background:linear-gradient(90deg,rgba(217,178,111,.24),transparent)}.zone.left:hover::after{transform:translate(-3px,-50%)}
-.zone.right{right:0}.zone.right::after{content:'›';right:20px}.zone.right:hover{background:linear-gradient(270deg,rgba(217,178,111,.24),transparent)}.zone.right:hover::after{transform:translate(3px,-50%)}
+.zone.left{left:0}.zone.left::after{content:'‹';left:20px}.zone.left:hover{background:linear-gradient(90deg,rgba(255,255,255,.2),transparent)}.zone.left:hover::after{transform:translate(-3px,-50%)}
+.zone.right{right:0}.zone.right::after{content:'›';right:20px}.zone.right:hover{background:linear-gradient(270deg,rgba(255,255,255,.2),transparent)}.zone.right:hover::after{transform:translate(3px,-50%)}
 body.light .zone{color:rgba(46,32,13,.72)}
 </style></head><body><div id="stage"><div id="title"></div><div id="area"><div id="content"></div></div><div id="counter"></div></div><div id="measure-area"><div id="measure-content"></div></div><button class="zone left" aria-label="Ankstesnė skaidrė"></button><button class="zone right" aria-label="Kita skaidrė"></button></body></html>`);
             presenterWindow.document.close();
