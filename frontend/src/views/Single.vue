@@ -524,10 +524,12 @@
                 </div>
             </section>
 
-            <aside
+            <dialog
                 v-if="slideshowSettingsOpen"
+                ref="slideshowSettingsDialog"
                 class="lyrics-show__settings"
                 aria-label="Skaidrių nustatymai"
+                @cancel.prevent="closeSlideshowSettings"
                 @click.stop
             >
                 <div class="lyrics-show__settings-header">
@@ -729,7 +731,7 @@
                         </label>
                     </div>
                 </section>
-            </aside>
+            </dialog>
 
             <aside
                 v-if="songGalleryOpen"
@@ -1332,10 +1334,28 @@ export default {
                 this.songGalleryOpen = false;
                 this.slideshowSettingsOpen = true;
                 this.scheduleSlideValidation();
+                this.$nextTick(() => this.showSlideshowSettingsDialog());
             }
+        },
+        showSlideshowSettingsDialog() {
+            const dialog = this.$refs.slideshowSettingsDialog;
+            if (!dialog || dialog.open) return;
+            if (typeof dialog.showModal === 'function') {
+                try {
+                    dialog.showModal();
+                    return;
+                } catch {
+                    // Fall back to a regular open dialog below.
+                }
+            }
+            dialog.setAttribute('open', '');
         },
         closeSlideshowSettings() {
             this.validateAllSlides();
+            const dialog = this.$refs.slideshowSettingsDialog;
+            if (dialog?.open && typeof dialog.close === 'function') {
+                dialog.close();
+            }
             this.slideshowSettingsOpen = false;
         },
         resetSlideshowSettings() {
@@ -1366,23 +1386,29 @@ export default {
             this.slideshowOpen = true;
             this.fittedSlideshowFontSize = this.slideshowFontSize;
             this.scheduleSlideFit();
-            this.$nextTick(() => this.enterSlideshowFullscreen());
+            this.$nextTick(() => {
+                this.enterSlideshowFullscreen().finally(() => {
+                    this.showSlideshowSettingsDialog();
+                });
+            });
         },
         enterSlideshowFullscreen() {
             const element = this.$refs.slideshow;
             if (!element?.requestFullscreen || document.fullscreenElement) {
                 this.scheduleSlideFit();
-                return;
+                return Promise.resolve(false);
             }
-            element
+            return element
                 .requestFullscreen()
                 .then(() => {
                     this.fullscreenActive = true;
                     this.scheduleSlideFit();
+                    return true;
                 })
                 .catch(() => {
                     this.fullscreenActive = false;
                     this.scheduleSlideFit();
+                    return false;
                 });
         },
         closeSlideshow() {
@@ -3584,14 +3610,21 @@ export default {
         bottom: 82px;
         z-index: 6;
         width: min(520px, calc(100vw - 40px));
+        max-width: none;
+        max-height: none;
         box-sizing: border-box;
         overflow: auto;
+        margin: 0;
         padding: 20px;
         border: 1px solid var(--lyrics-show-border);
         border-radius: 16px;
         color: var(--lyrics-show-text);
         background: var(--lyrics-show-panel);
         box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
+
+        &::backdrop {
+            background: transparent;
+        }
     }
 
     &__song-gallery {
