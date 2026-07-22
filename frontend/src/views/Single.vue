@@ -35,10 +35,36 @@
         </header>
 
         <section class="song-heading" aria-labelledby="song-title">
-            <span class="song-heading__number">
-                <span class="song-heading__number-label">Giesmė</span>
-                <span class="song-heading__number-value">{{ song.songId }}</span>
-            </span>
+            <div class="song-heading__number-row">
+                <button
+                    class="song-heading__navigation song-heading__navigation--previous"
+                    :disabled="!previousSongId"
+                    :aria-label="previousSongId ? `Ankstesnė giesmė ${previousSongId}` : 'Ankstesnės giesmės nėra'"
+                    @click="goTo(previousSongId)"
+                >
+                    <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m15 18-6-6 6-6" />
+                    </svg>
+                    <strong>{{ previousSongId || '—' }}</strong>
+                </button>
+
+                <span class="song-heading__number">
+                    <span class="song-heading__number-label">Giesmė</span>
+                    <span class="song-heading__number-value">{{ song.songId }}</span>
+                </span>
+
+                <button
+                    class="song-heading__navigation song-heading__navigation--next"
+                    :disabled="!nextSongId"
+                    :aria-label="nextSongId ? `Kita giesmė ${nextSongId}` : 'Kitos giesmės nėra'"
+                    @click="goTo(nextSongId)"
+                >
+                    <strong>{{ nextSongId || '—' }}</strong>
+                    <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m9 18 6-6-6-6" />
+                    </svg>
+                </button>
+            </div>
             <h1 id="song-title" ref="songTitle">{{ song.title }}</h1>
             <p
                 ref="songVerse"
@@ -49,25 +75,13 @@
             </p>
         </section>
 
-        <section class="song-switcher" aria-label="Giesmės navigacija ir veiksmai">
-            <button
-                class="song-switcher__navigation song-switcher__navigation--previous"
-                :disabled="!previousSongId"
-                :aria-label="previousSongId ? `Ankstesnė giesmė ${previousSongId}` : 'Ankstesnės giesmės nėra'"
-                @click="goTo(previousSongId)"
-            >
-                <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="m15 18-6-6 6-6" />
-                </svg>
-                <span>
-                    <small>Ankstesnė</small>
-                    <strong>Nr. {{ previousSongId || '—' }}</strong>
-                </span>
-            </button>
-
+        <section
+            v-if="sourceSlides.length"
+            class="song-switcher"
+            aria-label="Skaidrių veiksmai"
+        >
             <div class="song-switcher__actions">
                 <button
-                    v-if="sourceSlides.length"
                     class="song__slideshow-button song-switcher__slideshow"
                     @click="openSlideshow"
                 >
@@ -78,21 +92,6 @@
                     Skaidrės
                 </button>
             </div>
-
-            <button
-                class="song-switcher__navigation song-switcher__navigation--next"
-                :disabled="!nextSongId"
-                :aria-label="nextSongId ? `Kita giesmė ${nextSongId}` : 'Kitos giesmės nėra'"
-                @click="goTo(nextSongId)"
-            >
-                <span>
-                    <small>Kita</small>
-                    <strong>Nr. {{ nextSongId || '—' }}</strong>
-                </span>
-                <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="m9 18 6-6-6-6" />
-                </svg>
-            </button>
         </section>
 
         <section v-if="audioTypes.length" class="song-audio song-panel" aria-labelledby="song-audio-title">
@@ -2961,14 +2960,63 @@ body.light .zone{color:rgba(46,32,13,.72)}
     margin: 0 auto 20px;
     text-align: center;
 
+    &__number-row {
+        display: grid;
+        grid-template-columns: minmax(76px, 1fr) auto minmax(76px, 1fr);
+        align-items: center;
+        gap: 12px;
+        width: min(440px, 100%);
+        margin: 0 auto 10px;
+    }
+
     &__number {
         display: inline-flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        margin-bottom: 10px;
         color: var(--app-accent-strong);
         line-height: 1;
+    }
+
+    &__navigation {
+        display: inline-flex;
+        min-width: 0;
+        min-height: 44px;
+        align-items: center;
+        gap: 5px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 12px;
+        color: var(--app-muted);
+        background: transparent;
+        cursor: pointer;
+        transition: color 0.16s ease, background-color 0.16s ease;
+
+        strong {
+            overflow: hidden;
+            color: var(--app-accent-strong);
+            font-size: 15px;
+            font-variant-numeric: tabular-nums;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        &:hover:not(:disabled) {
+            color: var(--app-text);
+            background: var(--app-surface-soft);
+        }
+
+        &:disabled {
+            visibility: hidden;
+        }
+
+        &--previous {
+            justify-self: end;
+        }
+
+        &--next {
+            justify-self: start;
+        }
     }
 
     &__number-label {
@@ -3016,62 +3064,10 @@ body.light .zone{color:rgba(46,32,13,.72)}
 }
 
 .song-switcher {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: center;
     margin: 0 auto 18px;
-
-    &__navigation {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        align-items: center;
-        gap: 10px;
-        min-height: 64px;
-        padding: 8px 14px;
-        border: 1px solid var(--app-border);
-        border-radius: 15px;
-        color: var(--app-text);
-        background: var(--app-surface);
-        box-shadow: 0 7px 20px rgba(65, 49, 27, 0.08);
-        text-align: left;
-        cursor: pointer;
-        transition: transform 0.16s ease, border-color 0.16s ease;
-
-        &:hover:not(:disabled) {
-            border-color: color-mix(in srgb, var(--app-accent) 50%, transparent);
-            background: var(--app-surface);
-            transform: translateY(-1px);
-        }
-
-        &:disabled {
-            opacity: 0.42;
-            cursor: default;
-        }
-
-        small,
-        strong {
-            display: block;
-        }
-
-        small {
-            margin-bottom: 2px;
-            color: var(--app-muted);
-            font-size: 11px;
-            font-weight: 650;
-            letter-spacing: 0.055em;
-            text-transform: uppercase;
-        }
-
-        strong {
-            font-size: 15px;
-        }
-
-        &--next {
-            grid-template-columns: 1fr auto;
-            text-align: right;
-        }
-    }
 
     &__actions {
         display: flex;
@@ -3513,8 +3509,19 @@ body.light .zone{color:rgba(46,32,13,.72)}
         margin-bottom: 12px;
         padding: 0 8px;
 
-        &__number {
+        &__number-row {
+            grid-template-columns: minmax(66px, 1fr) auto minmax(66px, 1fr);
+            gap: 5px;
             margin-bottom: 8px;
+        }
+
+        &__navigation {
+            padding: 0 6px;
+
+            strong {
+                max-width: 68px;
+                font-size: 13px;
+            }
         }
 
         h1 {
@@ -3529,12 +3536,10 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     .song-switcher {
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        width: 100%;
 
         &__actions {
-            grid-column: 1 / -1;
-            grid-row: 1;
+            width: 100%;
         }
 
         &__slideshow {
@@ -3544,20 +3549,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
             font-size: 14px;
         }
 
-        &__navigation {
-            min-width: 0;
-            min-height: 56px;
-            padding: 6px 10px;
-            box-shadow: none;
-
-            small {
-                font-size: 10px;
-            }
-
-            strong {
-                font-size: 14px;
-            }
-        }
     }
 
     .song-audio.song-panel {
