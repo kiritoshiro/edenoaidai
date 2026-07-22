@@ -1199,7 +1199,27 @@ export default {
 
             if (verses.length === 0) return choruses;
 
+            const hasSavedSlides =
+                Array.isArray(this.song?.slides) && this.song.slides.length > 0;
+            const chorusKeys = choruses.map(slide =>
+                lyricsToPlainText(slide.text)
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .toLocaleLowerCase('lt'),
+            );
+            const hasExplicitRepeatedChorus =
+                chorusKeys.length > new Set(chorusKeys).size;
+
+            // Legacy body text and already repeated choruses describe their final order.
+            if (!hasSavedSlides || hasExplicitRepeatedChorus) {
+                return this.sourceSlides.map(slide => ({ ...slide }));
+            }
+
             const sequence = [];
+            for (const slide of this.sourceSlides) {
+                if (!slide.isChorus) break;
+                sequence.push({ ...slide });
+            }
             verses.forEach(verse => {
                 sequence.push({
                     text: verse.text,
@@ -1882,8 +1902,18 @@ export default {
             });
         },
         validateAllSlides() {
-            const area = this.$refs.slideshowMeasureArea;
-            const content = this.$refs.slideshowMeasureContent;
+            let area = this.$refs.slideshowMeasureArea;
+            let content = this.$refs.slideshowMeasureContent;
+            if (this.presenterConnected && presenterWindow && !presenterWindow.closed) {
+                const presenterArea =
+                    presenterWindow.document.getElementById('measure-area');
+                const presenterContent =
+                    presenterWindow.document.getElementById('measure-content');
+                if (presenterArea && presenterContent) {
+                    area = presenterArea;
+                    content = presenterContent;
+                }
+            }
             if (!area || !content || this.slideshowSequence.length === 0) {
                 this.slideshowOverflowIndexes = [];
                 return [];
@@ -1926,13 +1956,16 @@ export default {
                 }
 
                 content.style.fontSize = `${displayed}px`;
-                const rect = content.getBoundingClientRect();
+                const textRange = content.ownerDocument.createRange();
+                textRange.selectNodeContents(content);
+                const textRect = textRange.getBoundingClientRect();
+                textRange.detach?.();
                 const fits =
                     dimensionsFit(displayed) &&
-                    rect.left >= areaRect.left - 1 &&
-                    rect.right <= areaRect.right + 1 &&
-                    rect.top >= areaRect.top - 1 &&
-                    rect.bottom <= areaRect.bottom + 1;
+                    textRect.left >= areaRect.left - 2 &&
+                    textRect.right <= areaRect.right + 2 &&
+                    textRect.top >= areaRect.top - 2 &&
+                    textRect.bottom <= areaRect.bottom + 2;
                 if (!fits) overflowIndexes.push(index);
             });
 
@@ -1968,6 +2001,7 @@ export default {
             this.initializePresenterWindow();
             this.presenterConnected = true;
             this.renderPresenterWindow();
+            this.scheduleSlideValidation();
             window.setTimeout(() => {
                 this.presenterOpening = false;
             }, 1000);
@@ -1991,7 +2025,10 @@ export default {
                     if (target && presenterWindow && !presenterWindow.closed) {
                         presenterWindow.moveTo(target.availLeft, target.availTop);
                         presenterWindow.resizeTo(target.availWidth, target.availHeight);
-                        window.setTimeout(() => this.renderPresenterWindow(), 150);
+                        window.setTimeout(() => {
+                            this.renderPresenterWindow();
+                            this.scheduleSlideValidation();
+                        }, 150);
                     }
                 } catch {
                     // The separate window still works when screen permission is denied.
@@ -2004,8 +2041,27 @@ export default {
             presenterWindow.document.write(`<!doctype html>
 <html lang="lt"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Edeno Aidai – skaidrės</title><style>
-*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Avenir,Helvetica,Arial,sans-serif}body{color:#fff;background:radial-gradient(circle at 50% 45%,#263447 0,#111923 48%,#080b10 100%)}body.light{color:#17130d;background:radial-gradient(circle at 50% 45%,#fff 0,#f4efe6 58%,#e8dfd1 100%)}#stage{display:grid;grid-template-rows:76px minmax(0,1fr) 82px;width:100vw;height:100vh}#title{display:flex;align-items:center;justify-content:center;padding:12px 5vw;color:rgba(255,255,255,.72);font-size:clamp(16px,2vw,24px)}body.light #title{color:rgba(23,19,13,.68)}#area{display:grid;min-width:0;min-height:0;overflow:hidden}#content{align-self:center;justify-self:center;width:min(1200px,86vw);min-height:0;height:auto;max-height:100%;overflow:hidden;padding:30px 0;font-weight:600;line-height:1.32;text-align:center;text-wrap:balance;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 3px 16px rgba(0,0,0,.55);transform:translate(var(--offset-x),var(--offset-y));pointer-events:none}body.light #content{text-shadow:0 2px 10px rgba(75,52,20,.18)}body.no-wrap #content{white-space:pre;text-wrap:nowrap;overflow-wrap:normal}#counter{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.68);font-size:18px}body.light #counter{color:rgba(23,19,13,.68)}.zone{position:fixed;top:0;bottom:0;width:50%;border:0;background:transparent;cursor:pointer}.zone.left{left:0}.zone.right{right:0}
-</style></head><body><div id="stage"><div id="title"></div><div id="area"><div id="content"></div></div><div id="counter"></div></div><button class="zone left" aria-label="Ankstesnė skaidrė"></button><button class="zone right" aria-label="Kita skaidrė"></button></body></html>`);
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Avenir,Helvetica,Arial,sans-serif}
+body{color:#fff;background:radial-gradient(circle at 50% 45%,#263447 0,#111923 48%,#080b10 100%)}
+body.light{color:#17130d;background:radial-gradient(circle at 50% 45%,#fff 0,#f4efe6 58%,#e8dfd1 100%)}
+#stage{display:grid;grid-template-rows:76px minmax(0,1fr) 82px;width:100vw;height:100vh}
+#title{display:flex;align-items:center;justify-content:center;padding:12px 5vw;color:rgba(255,255,255,.72);font-size:clamp(16px,2vw,24px)}
+body.light #title{color:rgba(23,19,13,.68)}
+#area,#measure-area{display:grid;min-width:0;min-height:0;overflow:hidden}
+#measure-area{position:fixed;inset:76px 0 82px;z-index:-1;visibility:hidden;pointer-events:none}
+#content,#measure-content{align-self:center;justify-self:stretch;width:100%;min-height:0;height:auto;max-height:100%;overflow:hidden;padding:30px clamp(18px,4vw,72px);font-weight:600;line-height:1.32;text-align:center;text-wrap:balance;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 3px 16px rgba(0,0,0,.55);transform:translate(var(--offset-x),var(--offset-y));pointer-events:none}
+body.light #content,body.light #measure-content{text-shadow:0 2px 10px rgba(75,52,20,.18)}
+body.no-wrap #content,body.no-wrap #measure-content{white-space:pre;text-wrap:nowrap;overflow-wrap:normal}
+#counter{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.68);font-size:18px}
+body.light #counter{color:rgba(23,19,13,.68)}
+.zone{position:fixed;top:0;bottom:0;z-index:5;width:clamp(96px,14vw,260px);padding:0;border:0;color:rgba(255,255,255,.72);background:transparent;cursor:pointer;transition:background .18s ease}
+.zone::after{position:absolute;top:50%;opacity:0;font-size:54px;font-weight:300;transform:translateY(-50%);transition:opacity .18s ease,transform .18s ease}
+.zone:hover::after{opacity:.82}
+.zone.left{left:0}.zone.left::after{content:'‹';left:20px}.zone.left:hover{background:linear-gradient(90deg,rgba(217,178,111,.24),transparent)}.zone.left:hover::after{transform:translate(-3px,-50%)}
+.zone.right{right:0}.zone.right::after{content:'›';right:20px}.zone.right:hover{background:linear-gradient(270deg,rgba(217,178,111,.24),transparent)}.zone.right:hover::after{transform:translate(3px,-50%)}
+body.light .zone{color:rgba(46,32,13,.72)}
+</style></head><body><div id="stage"><div id="title"></div><div id="area"><div id="content"></div></div><div id="counter"></div></div><div id="measure-area"><div id="measure-content"></div></div><button class="zone left" aria-label="Ankstesnė skaidrė"></button><button class="zone right" aria-label="Kita skaidrė"></button></body></html>`);
             presenterWindow.document.close();
             presenterWindow.document.getElementById('area').style.overflow = 'visible';
             const presenterContent = presenterWindow.document.getElementById('content');
@@ -2019,6 +2075,12 @@ export default {
             presenterWindow.document.querySelector('.zone.right').onclick = () =>
                 this.nextSlide();
             presenterWindow.addEventListener('keydown', this.onSlideshowKeydown);
+            presenterWindow.addEventListener('resize', this.onPresenterResize);
+        },
+        onPresenterResize() {
+            if (!presenterWindow || presenterWindow.closed) return;
+            this.renderPresenterWindow();
+            this.scheduleSlideValidation();
         },
         renderPresenterWindow() {
             if (!presenterWindow || presenterWindow.closed) return;
@@ -2069,6 +2131,10 @@ export default {
                 presenterPollTimer = null;
             }
             if (presenterWindow && !presenterWindow.closed) {
+                presenterWindow.removeEventListener(
+                    'resize',
+                    this.onPresenterResize,
+                );
                 presenterWindow.close();
             }
             presenterWindow = null;
