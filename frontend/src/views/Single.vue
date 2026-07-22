@@ -237,6 +237,7 @@
                         <strong>Natos</strong>
                         <small>
                             {{ availableNoteFormats.length }}
+                            natų
                             {{ availableNoteFormats.length === 1 ? 'formatas' : 'formatai' }}
                             · {{ imageUrls.length }}
                             {{ imageUrls.length === 1 ? 'puslapis' : 'puslapiai' }}
@@ -319,7 +320,7 @@
 
     <Teleport to="body">
         <div
-            v-if="notesFullscreenOpen && currentNotePageUrl"
+            v-if="notesFullscreenOpen && imageUrls.length"
             class="notes-viewer"
             :class="{
                 'notes-viewer--dark': isDark,
@@ -347,17 +348,29 @@
                                 {{ noteFormatLabel(format) }}
                             </button>
                         </div>
-                        <button type="button" aria-label="Mažinti natas" @click="adjustNotesZoom(-0.25)">−</button>
-                        <button type="button" class="notes-viewer__zoom" @click="notesZoom = 1">
-                            {{ Math.round(notesZoom * 100) }}%
-                        </button>
-                        <button
-                            type="button"
-                            aria-label="Didinti natas"
-                            @click="adjustNotesZoom(0.25)"
-                        >
-                            +
-                        </button>
+                        <div class="notes-viewer__zoom-controls">
+                            <button
+                                type="button"
+                                aria-label="Mažinti natas"
+                                @click="adjustNotesZoom(-0.25)"
+                            >
+                                −
+                            </button>
+                            <button
+                                type="button"
+                                class="notes-viewer__zoom"
+                                @click="notesZoom = 1"
+                            >
+                                {{ Math.round(notesZoom * 100) }}%
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Didinti natas"
+                                @click="adjustNotesZoom(0.25)"
+                            >
+                                +
+                            </button>
+                        </div>
                     </div>
                     <button
                         type="button"
@@ -372,43 +385,16 @@
             </header>
 
             <div ref="notesViewport" class="notes-viewer__viewport">
-                <img
-                    :src="currentNotePageUrl"
-                    :alt="`Giesmės ${song.songId} natų ${notesPageIndex + 1} puslapis`"
-                    :style="notesImageStyle"
-                />
+                <div class="notes-viewer__pages">
+                    <img
+                        v-for="(url, index) in imageUrls"
+                        :key="url"
+                        :src="url"
+                        :alt="`Giesmės ${song.songId} natų ${index + 1} puslapis`"
+                        :style="notesImageStyle"
+                    />
+                </div>
             </div>
-
-            <button
-                type="button"
-                class="notes-viewer__page-button notes-viewer__page-button--previous"
-                :disabled="notesPageIndex === 0"
-                aria-label="Ankstesnis natų puslapis"
-                @click="previousNotePage"
-            >
-                ‹
-            </button>
-            <button
-                type="button"
-                class="notes-viewer__page-button notes-viewer__page-button--next"
-                :disabled="notesPageIndex >= imageUrls.length - 1"
-                aria-label="Kitas natų puslapis"
-                @click="nextNotePage"
-            >
-                ›
-            </button>
-
-            <footer class="notes-viewer__footer">
-                <button type="button" :disabled="notesPageIndex === 0" @click="previousNotePage">←</button>
-                <span>{{ notesPageIndex + 1 }} / {{ imageUrls.length }}</span>
-                <button
-                    type="button"
-                    :disabled="notesPageIndex >= imageUrls.length - 1"
-                    @click="nextNotePage"
-                >
-                    →
-                </button>
-            </footer>
         </div>
     </Teleport>
 
@@ -940,7 +926,6 @@ export default {
             notesHistoryOwned: false,
             notesOpening: false,
             notesVisible: localStorage.getItem('notesVisible') === 'true',
-            notesPageIndex: 0,
             notesZoom: 1,
             previousNotesBodyOverflow: '',
             selectedAudioType: '',
@@ -1133,9 +1118,6 @@ export default {
                 (_, index) => this.slideshowOptions[index]?.enabled !== false,
             );
         },
-        currentNotePageUrl() {
-            return this.imageUrls[this.notesPageIndex] || '';
-        },
         notesImageStyle() {
             return {
                 width: `${this.notesZoom * 100}%`,
@@ -1196,10 +1178,6 @@ export default {
         },
         imageUrls(value) {
             this.resetImages();
-            this.notesPageIndex = Math.min(
-                this.notesPageIndex,
-                Math.max(0, value.length - 1),
-            );
             if (value.length === 0) this.closeNotesFullscreen();
         },
         notesVisible(value) {
@@ -1388,20 +1366,24 @@ export default {
             this.slideshowOpen = true;
             this.fittedSlideshowFontSize = this.slideshowFontSize;
             this.scheduleSlideFit();
-            this.$nextTick(() => {
-                const element = this.$refs.slideshow;
-                if (!element?.requestFullscreen) return;
-                element
-                    .requestFullscreen()
-                    .then(() => {
-                        this.fullscreenActive = true;
-                        this.scheduleSlideFit();
-                    })
-                    .catch(() => {
-                        this.fullscreenActive = false;
-                        this.scheduleSlideFit();
-                    });
-            });
+            this.$nextTick(() => this.enterSlideshowFullscreen());
+        },
+        enterSlideshowFullscreen() {
+            const element = this.$refs.slideshow;
+            if (!element?.requestFullscreen || document.fullscreenElement) {
+                this.scheduleSlideFit();
+                return;
+            }
+            element
+                .requestFullscreen()
+                .then(() => {
+                    this.fullscreenActive = true;
+                    this.scheduleSlideFit();
+                })
+                .catch(() => {
+                    this.fullscreenActive = false;
+                    this.scheduleSlideFit();
+                });
         },
         closeSlideshow() {
             if (!this.slideshowOpen && !this.fullscreenActive) return;
@@ -1458,12 +1440,6 @@ export default {
                 if (event.key === 'Escape') {
                     event.preventDefault();
                     this.closeNotesFullscreen();
-                } else if (['ArrowRight', 'PageDown'].includes(event.key)) {
-                    event.preventDefault();
-                    this.nextNotePage();
-                } else if (['ArrowLeft', 'PageUp'].includes(event.key)) {
-                    event.preventDefault();
-                    this.previousNotePage();
                 } else if (['+', '='].includes(event.key)) {
                     event.preventDefault();
                     this.adjustNotesZoom(0.25);
@@ -1901,7 +1877,18 @@ export default {
             return firstLine.length > 70 ? `${firstLine.slice(0, 70)}…` : firstLine;
         },
         onFullscreenChange() {
+            const wasFullscreen = this.fullscreenActive;
             this.fullscreenActive = Boolean(document.fullscreenElement);
+
+            if (wasFullscreen && !this.fullscreenActive && this.slideshowOpen) {
+                if (this.slideshowSettingsOpen) {
+                    this.closeSlideshowSettings();
+                    this.$nextTick(() => this.enterSlideshowFullscreen());
+                } else {
+                    this.closeSlideshow();
+                    return;
+                }
+            }
             if (this.slideshowOpen) {
                 this.scheduleSlideFit();
             }
@@ -1913,7 +1900,6 @@ export default {
         selectNoteFormat(format) {
             if (!this.availableNoteFormats.includes(format)) return;
             this.imageType = format;
-            this.notesPageIndex = 0;
             this.notesZoom = 1;
             this.$nextTick(() => this.resetNotesViewport());
         },
@@ -1922,7 +1908,7 @@ export default {
         },
         async openNotesFullscreen() {
             if (
-                !this.currentNotePageUrl ||
+                this.imageUrls.length === 0 ||
                 this.notesFullscreenOpen ||
                 this.notesOpening
             ) {
@@ -1947,10 +1933,9 @@ export default {
             }
         },
         showNotesFullscreen() {
-            if (!this.currentNotePageUrl || this.notesFullscreenOpen) return;
+            if (this.imageUrls.length === 0 || this.notesFullscreenOpen) return;
             this.previousNotesBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
-            this.notesPageIndex = 0;
             this.notesZoom = 1;
             this.notesFullscreenOpen = true;
             this.$nextTick(() => this.resetNotesViewport());
@@ -1973,17 +1958,6 @@ export default {
             if (!this.notesFullscreenOpen) return;
             this.notesFullscreenOpen = false;
             document.body.style.overflow = this.previousNotesBodyOverflow;
-        },
-        previousNotePage() {
-            this.notesPageIndex = Math.max(0, this.notesPageIndex - 1);
-            this.resetNotesViewport();
-        },
-        nextNotePage() {
-            this.notesPageIndex = Math.min(
-                Math.max(0, this.imageUrls.length - 1),
-                this.notesPageIndex + 1,
-            );
-            this.resetNotesViewport();
         },
         adjustNotesZoom(delta) {
             this.notesZoom = clamp(this.notesZoom + delta, 1, 3);
@@ -2408,7 +2382,7 @@ export default {
     inset: 0;
     z-index: 11000;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
     width: 100vw;
     height: 100vh;
     overflow: hidden;
@@ -2428,7 +2402,7 @@ export default {
     &__toolbar,
     &__controls,
     &__formats,
-    &__footer {
+    &__zoom-controls {
         display: flex;
         align-items: center;
     }
@@ -2452,7 +2426,8 @@ export default {
     }
 
     &__controls,
-    &__formats {
+    &__formats,
+    &__zoom-controls {
         gap: 6px;
     }
 
@@ -2460,8 +2435,7 @@ export default {
         gap: 16px;
     }
 
-    &__toolbar button,
-    &__footer button {
+    &__toolbar button {
         min-width: 40px;
         height: 40px;
         padding: 5px 10px;
@@ -2524,6 +2498,13 @@ export default {
         scroll-behavior: smooth;
         overscroll-behavior: contain;
 
+        .notes-viewer__pages {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 18px;
+            width: 100%;
+        }
+
         img {
             display: block;
             max-width: none;
@@ -2532,56 +2513,6 @@ export default {
             background: #fff;
             box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
             transition: width 0.18s ease;
-        }
-    }
-
-    &__page-button {
-        position: fixed;
-        top: 50%;
-        z-index: 4;
-        display: grid;
-        width: 48px;
-        height: 72px;
-        padding: 0;
-        place-items: center;
-        border: 1px solid var(--notes-border);
-        color: var(--notes-text);
-        background: var(--notes-surface);
-        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.14);
-        font-size: 38px;
-        cursor: pointer;
-        transform: translateY(-50%);
-
-        &--previous {
-            left: 10px;
-            border-radius: 0 18px 18px 0;
-        }
-
-        &--next {
-            right: 10px;
-            border-radius: 18px 0 0 18px;
-        }
-
-        &:disabled {
-            opacity: 0.22;
-            cursor: default;
-        }
-    }
-
-    &__footer {
-        z-index: 3;
-        justify-content: center;
-        gap: 14px;
-        min-height: 58px;
-        padding: 8px 16px;
-        border-top: 1px solid var(--notes-border);
-        background: var(--notes-surface);
-
-        span {
-            min-width: 76px;
-            color: var(--notes-muted);
-            text-align: center;
-            font-variant-numeric: tabular-nums;
         }
     }
 }
@@ -3202,13 +3133,25 @@ export default {
         }
 
         &__toolbar {
-            justify-content: space-between;
-            flex-wrap: nowrap;
+            justify-content: flex-end;
+            flex-wrap: wrap;
         }
 
         &__controls {
+            display: grid;
+            flex: 1 0 100%;
+            order: 2;
             min-width: 0;
-            flex-wrap: wrap;
+            gap: 7px;
+        }
+
+        &__formats,
+        &__zoom-controls {
+            justify-content: center;
+        }
+
+        &__close {
+            order: 1;
         }
 
         &__toolbar button {
@@ -3218,20 +3161,6 @@ export default {
 
         &__viewport {
             padding: 14px 18px;
-        }
-
-        &__page-button {
-            width: 36px;
-            height: 58px;
-            font-size: 30px;
-
-            &--previous {
-                left: 0;
-            }
-
-            &--next {
-                right: 0;
-            }
         }
     }
 }
