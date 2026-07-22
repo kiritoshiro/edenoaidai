@@ -1697,6 +1697,9 @@ export default {
                 return;
             }
             if (!this.slideshowOpen && !this.presenterConnected) return;
+            const settingsInput = event.target.closest?.(
+                '.lyrics-show__settings input, .lyrics-show__settings select, .lyrics-show__settings textarea, .lyrics-show__settings [contenteditable="true"]',
+            );
             if (
                 event.key !== 'Escape' &&
                 event.target.closest?.('.lyrics-show__audio')
@@ -1719,7 +1722,13 @@ export default {
                     }, 1000);
                     this.closeSlideshowSettings();
                 }
-                return;
+                if (
+                    !this.presenterConnected ||
+                    settingsInput ||
+                    event.key === ' '
+                ) {
+                    return;
+                }
             }
             if (['ArrowRight', 'PageDown', ' '].includes(event.key)) {
                 event.preventDefault();
