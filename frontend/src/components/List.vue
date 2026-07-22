@@ -1,20 +1,34 @@
 <template>
     <div class="list">
-        <router-link
+        <article
             v-for="song in songs"
             :id="`song-${song.songId}`"
             :key="song.id"
             class="element"
-            :to="`/song/${song.songId}`"
         >
-            <span class="element__number">{{ song.songId }}</span>
+            <router-link class="element__main" :to="`/song/${song.songId}`">
+                <span class="element__number">{{ song.songId }}</span>
 
-            <p class="element__title">{{ song.title }}</p>
+                <p class="element__title">{{ song.title }}</p>
+            </router-link>
 
             <div class="icons">
-                <song-icon v-for="type in song.lists" :key="type" :name="type" />
+                <router-link
+                    v-for="type in song.lists"
+                    :key="type"
+                    class="icons__choice"
+                    :to="{
+                        name: 'single',
+                        params: { songId: song.songId },
+                        query: { audio: type },
+                    }"
+                    :aria-label="`Atidaryti giesmę ${song.songId} su įrašu ${type}`"
+                    :title="`Atidaryti su įrašu: ${type}`"
+                >
+                    <song-icon :name="type" />
+                </router-link>
             </div>
-        </router-link>
+        </article>
     </div>
 </template>
 
@@ -69,20 +83,27 @@ export default {
 
 .element {
     display: grid;
-    grid-template-columns: 58px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     min-height: 66px;
     overflow: hidden;
     border: 1px solid var(--app-border);
     border-radius: 16px;
-    color: var(--app-text);
     background: var(--app-surface);
     box-shadow: var(--app-shadow-small);
     font-size: 16px;
     line-height: 1.45;
-    text-decoration: none;
     transition: border-color 0.18s ease, box-shadow 0.18s ease,
         transform 0.18s ease;
+
+    &__main {
+        display: grid;
+        grid-template-columns: 58px minmax(0, 1fr);
+        align-items: center;
+        align-self: stretch;
+        color: var(--app-text);
+        text-decoration: none;
+    }
 
     &__number {
         display: inline-flex;
@@ -120,6 +141,21 @@ export default {
     align-items: center;
     gap: 3px;
     padding-right: 12px;
+
+    &__choice {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border-radius: 10px;
+        color: var(--app-text);
+        text-decoration: none;
+
+        &:hover {
+            color: var(--app-accent-strong);
+            background: var(--app-accent-soft);
+        }
+    }
 }
 
 .icon-audio {
@@ -154,9 +190,13 @@ export default {
 
 @media (max-width: 480px) {
     .element {
-        grid-template-columns: 52px minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         min-height: 62px;
         border-radius: 14px;
+
+        &__main {
+            grid-template-columns: 52px minmax(0, 1fr);
+        }
 
         &__number {
             min-width: 38px;
@@ -174,6 +214,11 @@ export default {
     .icons {
         gap: 1px;
         padding-right: 8px;
+
+        &__choice {
+            width: 34px;
+            height: 34px;
+        }
     }
 
     .icon-audio,

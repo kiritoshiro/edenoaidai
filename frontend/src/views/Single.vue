@@ -97,12 +97,26 @@
 
         <section v-if="audioTypes.length" class="song-audio song-panel" aria-labelledby="song-audio-title">
             <div class="song-audio__header">
-                <div class="song-audio__icon" aria-hidden="true">
+                <button
+                    v-if="audioTypes.length > 1"
+                    type="button"
+                    class="song-audio__icon song-audio__icon--button"
+                    aria-label="Pasirinkti garso įrašo versiją"
+                    title="Pasirinkti įrašo versiją"
+                    @click="openAudioTypePicker"
+                >
+                    <song-icon :name="selectedAudioType" />
+                </button>
+                <div v-else class="song-audio__icon" aria-hidden="true">
                     <song-icon :name="selectedAudioType" />
                 </div>
                 <label v-if="audioTypes.length > 1" class="song-audio__version">
                     <span id="song-audio-title">Giesmės garso įrašas</span>
-                    <select v-model="selectedAudioType" aria-label="Įrašo versija">
+                    <select
+                        ref="audioTypeSelect"
+                        v-model="selectedAudioType"
+                        aria-label="Įrašo versija"
+                    >
                         <option v-for="type in audioTypes" :key="type" :value="type">
                             {{ audioTypeLabel(type) }}
                         </option>
@@ -318,32 +332,41 @@
             <header class="notes-viewer__header">
                 <strong>{{ song.songId }} {{ song.title }}</strong>
                 <div class="notes-viewer__toolbar">
-                    <div
-                        v-if="availableNoteFormats.length > 1"
-                        class="notes-viewer__formats"
-                    >
-                        <button
-                            v-for="format in availableNoteFormats"
-                            :key="format"
-                            type="button"
-                            :class="{ selected: imageType === format }"
-                            @click="selectNoteFormat(format)"
+                    <div class="notes-viewer__controls">
+                        <div
+                            v-if="availableNoteFormats.length > 1"
+                            class="notes-viewer__formats"
                         >
-                            {{ noteFormatLabel(format) }}
+                            <button
+                                v-for="format in availableNoteFormats"
+                                :key="format"
+                                type="button"
+                                :class="{ selected: imageType === format }"
+                                @click="selectNoteFormat(format)"
+                            >
+                                {{ noteFormatLabel(format) }}
+                            </button>
+                        </div>
+                        <button type="button" aria-label="Mažinti natas" @click="adjustNotesZoom(-0.25)">−</button>
+                        <button type="button" class="notes-viewer__zoom" @click="notesZoom = 1">
+                            {{ Math.round(notesZoom * 100) }}%
+                        </button>
+                        <button
+                            type="button"
+                            aria-label="Didinti natas"
+                            @click="adjustNotesZoom(0.25)"
+                        >
+                            +
                         </button>
                     </div>
-                    <button type="button" aria-label="Mažinti natas" @click="adjustNotesZoom(-0.25)">−</button>
-                    <button type="button" class="notes-viewer__zoom" @click="notesZoom = 1">
-                        {{ Math.round(notesZoom * 100) }}%
-                    </button>
-                    <button type="button" aria-label="Didinti natas" @click="adjustNotesZoom(0.25)">+</button>
                     <button
                         type="button"
                         class="notes-viewer__close"
                         aria-label="Uždaryti natas"
                         @click="closeNotesFullscreen"
                     >
-                        ×
+                        <span aria-hidden="true">←</span>
+                        Atgal
                     </button>
                 </div>
             </header>
@@ -819,7 +842,7 @@ import SongIcon from '../components/SongIcon.vue';
 
 const MAX_SLIDESHOW_FONT_SIZE = 320;
 const DEFAULT_LYRICS_FONT_SIZE = 22;
-const MOBILE_LYRICS_FONT_SIZE = 20;
+const MOBILE_LYRICS_FONT_SIZE = 18;
 const DEFAULT_SLIDESHOW_FONT_SIZE = 36;
 let presenterWindow = null;
 let presenterPollTimer = null;
@@ -831,11 +854,11 @@ function clamp(value, min, max) {
 function initialLyricsFontSize() {
     const stored = parseInt(localStorage.getItem('fontSize'), 10);
     const compact = window.matchMedia('(max-width: 720px)').matches;
-    const migrationKey = 'mobileLyricsDefault20';
+    const migrationKey = 'mobileLyricsDefault18';
 
     if (compact && localStorage.getItem(migrationKey) !== 'true') {
         localStorage.setItem(migrationKey, 'true');
-        if (!stored || [DEFAULT_LYRICS_FONT_SIZE, 24].includes(stored)) {
+        if (!stored || [DEFAULT_LYRICS_FONT_SIZE, 24, 20].includes(stored)) {
             localStorage.setItem('fontSize', String(MOBILE_LYRICS_FONT_SIZE));
             return MOBILE_LYRICS_FONT_SIZE;
         }
@@ -1158,6 +1181,12 @@ export default {
                 this.finishCloseNotesFullscreen();
             }
         },
+        '$route.query.audio'(value) {
+            const requested = String(value || '');
+            if (this.audioTypes.includes(requested)) {
+                this.selectedAudioType = requested;
+            }
+        },
         songId() {
             this.closeNotesFullscreen();
             this.resetAudioState();
@@ -1182,7 +1211,10 @@ export default {
             }
         },
         audioTypes(types) {
-            if (!types.includes(this.selectedAudioType)) {
+            const requested = String(this.$route.query.audio || '');
+            if (types.includes(requested)) {
+                this.selectedAudioType = requested;
+            } else if (!types.includes(this.selectedAudioType)) {
                 this.selectedAudioType = types[0] || '';
             }
             if (types.length === 0) this.resetAudioState();
@@ -1980,6 +2012,22 @@ export default {
                 ? cleaned.charAt(0).toLocaleUpperCase('lt') + cleaned.slice(1)
                 : 'Įrašas';
         },
+        openAudioTypePicker() {
+            if (this.audioTypes.length < 2) return;
+            const select = this.$refs.audioTypeSelect;
+            if (!select) return;
+
+            try {
+                if (typeof select.showPicker === 'function') {
+                    select.showPicker();
+                } else {
+                    select.focus();
+                    select.click();
+                }
+            } catch {
+                select.focus();
+            }
+        },
         async fetchTrackLabels() {
             try {
                 const separator = config.tracksUrl.includes('?') ? '&' : '?';
@@ -2189,6 +2237,18 @@ export default {
             width: 28px;
             height: 28px;
         }
+
+        &--button {
+            padding: 0;
+            border: 0;
+            cursor: pointer;
+            transition: background-color 0.16s ease, transform 0.16s ease;
+
+            &:hover {
+                background: var(--app-hover);
+                transform: translateY(-1px);
+            }
+        }
     }
 
     &__version {
@@ -2366,6 +2426,7 @@ export default {
 
     &__header,
     &__toolbar,
+    &__controls,
     &__formats,
     &__footer {
         display: flex;
@@ -2390,9 +2451,13 @@ export default {
         }
     }
 
-    &__toolbar,
+    &__controls,
     &__formats {
         gap: 6px;
+    }
+
+    &__toolbar {
+        gap: 16px;
     }
 
     &__toolbar button,
@@ -2427,9 +2492,28 @@ export default {
     }
 
     &__close {
-        border-radius: 50% !important;
-        font-size: 27px !important;
+        display: inline-flex;
+        min-width: 86px !important;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border-color: rgba(174, 54, 48, 0.32) !important;
+        border-radius: 10px !important;
+        color: #8d2f2b !important;
+        background: rgba(190, 66, 58, 0.12) !important;
+        font-size: 14px !important;
+        font-weight: 800;
         line-height: 1;
+
+        &:hover {
+            border-color: rgba(174, 54, 48, 0.5) !important;
+            background: rgba(190, 66, 58, 0.2) !important;
+        }
+    }
+
+    &--dark &__close {
+        color: #ffaaa4 !important;
+        background: rgba(211, 74, 66, 0.18) !important;
     }
 
     &__viewport {
@@ -3118,7 +3202,12 @@ export default {
         }
 
         &__toolbar {
-            justify-content: center;
+            justify-content: space-between;
+            flex-wrap: nowrap;
+        }
+
+        &__controls {
+            min-width: 0;
             flex-wrap: wrap;
         }
 
