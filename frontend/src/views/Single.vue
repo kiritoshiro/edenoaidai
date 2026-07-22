@@ -3101,6 +3101,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         font-size: clamp(42px, 7vw, 58px);
         font-weight: 600;
         letter-spacing: -0.04em;
+        white-space: nowrap;
     }
 
     h1 {
