@@ -59,6 +59,11 @@ export default {
     --adm-border: rgba(0, 0, 0, 0.2);
     --adm-input: #fff;
     --adm-surface: #f5f5f5;
+    --adm-card: #fff;
+    --adm-card-chorus: #fffaf0;
+    --adm-card-edge: #b5b5b5;
+    --adm-card-chorus-edge: #d9b26f;
+    --adm-option: #f2f2f2;
     --adm-hover: #f5f5dc;
     --adm-row-separator: #fff;
     --adm-danger-text: #a5243d;
@@ -76,6 +81,11 @@ export default {
     --adm-border: rgba(255, 255, 255, 0.2);
     --adm-input: #18212c;
     --adm-surface: #1c2632;
+    --adm-card: #1c2632;
+    --adm-card-chorus: #29261f;
+    --adm-card-edge: #687585;
+    --adm-card-chorus-edge: #e0b66c;
+    --adm-option: #27313d;
     --adm-hover: #303a47;
     --adm-row-separator: #10161e;
     --adm-danger-text: #ff9aad;

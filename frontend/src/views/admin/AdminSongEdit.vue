@@ -620,14 +620,15 @@ export default {
 .lyrics-slide {
     margin-bottom: 14px;
     padding: 14px;
-    border: 1px solid #d9d9d9;
-    border-left: 5px solid #b5b5b5;
+    border: 1px solid var(--adm-border);
+    border-left: 5px solid var(--adm-card-edge);
     border-radius: 8px;
-    background: #fff;
+    color: var(--adm-text);
+    background: var(--adm-card);
 
     &--chorus {
-        border-left-color: #d9b26f;
-        background: #fffaf0;
+        border-left-color: var(--adm-card-chorus-edge);
+        background: var(--adm-card-chorus);
     }
 
     textarea {
@@ -661,7 +662,7 @@ export default {
             gap: 6px;
             padding: 7px 10px;
             border-radius: 6px;
-            background: #f2f2f2;
+            background: var(--adm-option);
             cursor: pointer;
         }
     }
