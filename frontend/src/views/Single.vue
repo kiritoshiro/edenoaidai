@@ -39,8 +39,9 @@
                 <span class="song-heading__number-label">Giesmė</span>
                 <span class="song-heading__number-value">{{ song.songId }}</span>
             </span>
-            <h1 id="song-title">{{ song.title }}</h1>
+            <h1 id="song-title" ref="songTitle">{{ song.title }}</h1>
             <p
+                ref="songVerse"
                 class="song-heading__verse"
                 :aria-hidden="song.verse ? undefined : 'true'"
             >
@@ -914,6 +915,7 @@ export default {
             ),
             slideshowOverflowIndexes: [],
             slideValidationFrame: 0,
+            headingFitFrame: 0,
             presenterConnected: false,
             phoneViewport: window.matchMedia('(max-width: 720px)').matches,
             songGalleryOpen: false,
@@ -1199,12 +1201,15 @@ export default {
         document.addEventListener('keydown', this.onSlideshowKeydown);
         document.addEventListener('fullscreenchange', this.onFullscreenChange);
         window.addEventListener('resize', this.scheduleSlideFit);
+        window.addEventListener('resize', this.scheduleHeadingFit);
         window.addEventListener('resize', this.updatePhoneViewport);
         this.updatePhoneViewport();
         document.fonts?.ready.then(() => {
             this.scheduleSlideFit();
+            this.scheduleHeadingFit();
             this.scheduleSlideValidation();
         });
+        this.scheduleHeadingFit();
         this.scheduleSlideValidation();
     },
     beforeRouteLeave(to, from, next) {
@@ -1234,7 +1239,11 @@ export default {
         document.removeEventListener('keydown', this.onSlideshowKeydown);
         document.removeEventListener('fullscreenchange', this.onFullscreenChange);
         window.removeEventListener('resize', this.scheduleSlideFit);
+        window.removeEventListener('resize', this.scheduleHeadingFit);
         window.removeEventListener('resize', this.updatePhoneViewport);
+        if (this.headingFitFrame) {
+            window.cancelAnimationFrame(this.headingFitFrame);
+        }
         if (this.slideValidationFrame) {
             window.cancelAnimationFrame(this.slideValidationFrame);
         }
@@ -1447,6 +1456,68 @@ export default {
             this.$nextTick(() => {
                 window.requestAnimationFrame(() => this.fitCurrentSlide());
             });
+        },
+        scheduleHeadingFit() {
+            this.$nextTick(() => {
+                if (this.headingFitFrame) {
+                    window.cancelAnimationFrame(this.headingFitFrame);
+                }
+                this.headingFitFrame = window.requestAnimationFrame(() => {
+                    this.headingFitFrame = 0;
+                    this.fitHeadingText();
+                });
+            });
+        },
+        fitHeadingElement(element, minimum, maximum, singleLineMinimum) {
+            if (!element) return;
+
+            const text = element.textContent.trim();
+            if (!text) {
+                element.style.fontSize = `${maximum}px`;
+                return;
+            }
+
+            element.style.whiteSpace = 'nowrap';
+            element.style.fontSize = `${singleLineMinimum}px`;
+            const keepOnOneLine = element.scrollWidth <= element.clientWidth + 1;
+            element.style.whiteSpace = keepOnOneLine ? 'nowrap' : '';
+
+            const fits = size => {
+                element.style.fontSize = `${size}px`;
+                return (
+                    element.scrollHeight <= element.clientHeight + 1 &&
+                    element.scrollWidth <= element.clientWidth + 1
+                );
+            };
+
+            let low = keepOnOneLine ? singleLineMinimum : minimum;
+            let high = maximum;
+            let best = low;
+            while (low <= high) {
+                const size = Math.floor((low + high) / 2);
+                if (fits(size)) {
+                    best = size;
+                    low = size + 1;
+                } else {
+                    high = size - 1;
+                }
+            }
+            element.style.fontSize = `${best}px`;
+        },
+        fitHeadingText() {
+            const compact = window.matchMedia('(max-width: 680px)').matches;
+            this.fitHeadingElement(
+                this.$refs.songTitle,
+                compact ? 20 : 28,
+                compact ? 38 : 45,
+                compact ? 28 : 34,
+            );
+            this.fitHeadingElement(
+                this.$refs.songVerse,
+                compact ? 12 : 13,
+                compact ? 18 : 17,
+                15,
+            );
         },
         fitCurrentSlide() {
             const content = this.$refs.slideshowContent;
@@ -1909,6 +1980,7 @@ export default {
                     this.prepareSlideshowOptions();
                     this.resetImages();
                     this.$nextTick(() => {
+                        this.scheduleHeadingFit();
                         this.scheduleSlideFit();
                         this.scheduleSlideValidation();
                         this.renderPresenterWindow();
@@ -2454,8 +2526,9 @@ export default {
 
     h1 {
         display: grid;
-        min-height: 2.2em;
+        height: clamp(78px, 9vw, 94px);
         place-items: center;
+        overflow: hidden;
         margin: 0;
         font-family: Georgia, 'Times New Roman', serif;
         font-size: clamp(30px, 5vw, 45px);
@@ -2466,11 +2539,12 @@ export default {
 
     &__verse {
         display: flex;
-        min-height: 3em;
+        height: 48px;
         align-items: center;
         justify-content: center;
         max-width: 610px;
-        margin: 14px auto 0;
+        overflow: hidden;
+        margin: 10px auto 0;
         color: var(--app-muted);
         font-family: Georgia, 'Times New Roman', serif;
         font-size: 16px;
@@ -2927,7 +3001,7 @@ export default {
     }
 
     .song-heading {
-        margin-bottom: 18px;
+        margin-bottom: 14px;
         padding: 0 8px;
 
         &__number {
@@ -2935,12 +3009,13 @@ export default {
         }
 
         h1 {
-            font-size: clamp(28px, 8vw, 36px);
+            height: 74px;
+            font-size: 32px;
         }
 
         &__verse {
-            min-height: 4.5em;
-            font-size: 15px;
+            height: 54px;
+            font-size: 16px;
         }
     }
 
@@ -3049,10 +3124,6 @@ export default {
 }
 
 @media (max-width: 390px) {
-    .song-heading h1 {
-        min-height: 3.3em;
-    }
-
     .song-topbar__back {
         width: 44px;
         justify-content: center;
