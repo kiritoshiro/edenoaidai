@@ -40,8 +40,11 @@
                 <span class="song-heading__number-value">{{ song.songId }}</span>
             </span>
             <h1 id="song-title">{{ song.title }}</h1>
-            <p v-if="song.verse" class="song-heading__verse">
-                <em>{{ song.verse }}</em>
+            <p
+                class="song-heading__verse"
+                :aria-hidden="song.verse ? undefined : 'true'"
+            >
+                <em>{{ song.verse || '\u00a0' }}</em>
             </p>
         </section>
 
@@ -2450,6 +2453,9 @@ export default {
     }
 
     h1 {
+        display: grid;
+        min-height: 2.2em;
+        place-items: center;
         margin: 0;
         font-family: Georgia, 'Times New Roman', serif;
         font-size: clamp(30px, 5vw, 45px);
@@ -2459,6 +2465,10 @@ export default {
     }
 
     &__verse {
+        display: flex;
+        min-height: 3em;
+        align-items: center;
+        justify-content: center;
         max-width: 610px;
         margin: 14px auto 0;
         color: var(--app-muted);
@@ -2929,6 +2939,7 @@ export default {
         }
 
         &__verse {
+            min-height: 4.5em;
             font-size: 15px;
         }
     }
@@ -3038,6 +3049,10 @@ export default {
 }
 
 @media (max-width: 390px) {
+    .song-heading h1 {
+        min-height: 3.3em;
+    }
+
     .song-topbar__back {
         width: 44px;
         justify-content: center;
