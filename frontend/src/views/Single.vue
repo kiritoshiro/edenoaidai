@@ -989,6 +989,7 @@ function slidesFromBody(body) {
         return {
             text: cleanText,
             isChorus,
+            chorusPart: false,
             chorusAfter: false,
         };
     });
@@ -1163,6 +1164,9 @@ export default {
                       .map(slide => ({
                           text: lyricsToPlainText(slide.text),
                           isChorus: slide.isChorus === true,
+                          chorusPart:
+                              slide.isChorus === true &&
+                              slide.chorusPart === true,
                           chorusAfter:
                               slide.isChorus === true
                                   ? false
@@ -1173,27 +1177,38 @@ export default {
             return saved.length > 0 ? saved : slidesFromBody(this.song.body);
         },
         readingBlocks() {
+            const blocks = [];
             let verseNumber = 0;
-            return this.sourceSlides.map(slide => {
+
+            this.sourceSlides.forEach(slide => {
                 if (slide.isChorus) {
-                    return {
+                    const previousBlock = blocks[blocks.length - 1];
+                    if (slide.chorusPart && previousBlock?.isChorus) {
+                        previousBlock.text += `\n\n${slide.text}`;
+                        return;
+                    }
+
+                    blocks.push({
                         text: slide.text,
                         isChorus: true,
-                    };
+                    });
+                    return;
                 }
 
                 verseNumber += 1;
                 const numbered = String(slide.text || '').match(
                     /^\s*(\d+)[.)]\s*/u,
                 );
-                return {
+                blocks.push({
                     text: numbered
                         ? String(slide.text).slice(numbered[0].length)
                         : slide.text,
                     isChorus: false,
                     number: numbered ? numbered[1] : verseNumber,
-                };
+                });
             });
+
+            return blocks;
         },
         slideshowSequence() {
             const choruses = this.sourceSlides.filter(slide => slide.isChorus);
@@ -1211,9 +1226,15 @@ export default {
             );
             const hasExplicitRepeatedChorus =
                 chorusKeys.length > new Set(chorusKeys).size;
+            const hasStructuredChorusParts = choruses.some(
+                slide => slide.chorusPart,
+            );
 
             // Legacy body text and already repeated choruses describe their final order.
-            if (!hasSavedSlides || hasExplicitRepeatedChorus) {
+            if (
+                !hasSavedSlides ||
+                (hasExplicitRepeatedChorus && !hasStructuredChorusParts)
+            ) {
                 return this.sourceSlides.map(slide => ({ ...slide }));
             }
 
@@ -2186,16 +2207,48 @@ body.light .zone{color:rgba(46,32,13,.72)}
             this.$router.push(`/song/${encodeURIComponent(songId)}`);
         },
         presentationSlideTitle(slide, index) {
-            const number = this.slideshowSlides
-                .slice(0, index + 1)
-                .filter(item => item.isChorus === slide.isChorus).length;
-            return slide.isChorus ? `Priegiesmis ${number}` : `Posmas ${number}`;
+            return this.sequenceSlideTitle(this.slideshowSlides, slide, index);
         },
         slideOptionTitle(slide, index) {
-            const number = this.slideshowSequence
-                .slice(0, index + 1)
-                .filter(item => item.isChorus === slide.isChorus).length;
-            return slide.isChorus ? `Priegiesmis ${number}` : `Posmas ${number}`;
+            return this.sequenceSlideTitle(this.slideshowSequence, slide, index);
+        },
+        sequenceSlideTitle(slides, slide, index) {
+            if (!slide.isChorus) {
+                const verseNumber = slides
+                    .slice(0, index + 1)
+                    .filter(item => !item.isChorus).length;
+                return `Posmas ${verseNumber}`;
+            }
+
+            let groupStart = index;
+            while (
+                groupStart > 0 &&
+                slides[groupStart]?.chorusPart &&
+                slides[groupStart - 1]?.isChorus
+            ) {
+                groupStart -= 1;
+            }
+
+            let groupEnd = groupStart;
+            while (
+                groupEnd + 1 < slides.length &&
+                slides[groupEnd + 1]?.isChorus &&
+                slides[groupEnd + 1]?.chorusPart
+            ) {
+                groupEnd += 1;
+            }
+
+            const chorusNumber = Math.max(
+                1,
+                slides
+                    .slice(0, groupStart + 1)
+                    .filter(item => item.isChorus && !item.chorusPart).length,
+            );
+            const partCount = groupEnd - groupStart + 1;
+            if (partCount > 1) {
+                return `Priegiesmis ${chorusNumber} · ${index - groupStart + 1}/${partCount}`;
+            }
+            return `Priegiesmis ${chorusNumber}`;
         },
         slideOptionPreview(slide) {
             const firstLine = String(slide.text || '').split(/\r?\n/, 1)[0].trim();
