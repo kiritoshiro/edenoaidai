@@ -2971,10 +2971,11 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__number-row {
         display: grid;
-        grid-template-columns: minmax(76px, 1fr) auto minmax(76px, 1fr);
+        grid-template-columns: 96px 140px 96px;
         align-items: center;
-        gap: 12px;
-        width: min(440px, 100%);
+        justify-content: center;
+        gap: 16px;
+        width: min(420px, 100%);
         margin: 0 auto 10px;
     }
 
@@ -2989,6 +2990,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__navigation {
         display: inline-flex;
+        width: 100%;
         min-width: 0;
         min-height: 44px;
         align-items: center;
@@ -2999,13 +3001,17 @@ body.light .zone{color:rgba(46,32,13,.72)}
         color: var(--app-muted);
         background: transparent;
         cursor: pointer;
+        transform: translateY(10px);
         transition: color 0.16s ease, background-color 0.16s ease;
 
         strong {
+            width: 5.25ch;
+            flex: 0 0 5.25ch;
             overflow: hidden;
             color: var(--app-accent-strong);
             font-size: 15px;
             font-variant-numeric: tabular-nums;
+            text-align: center;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -3020,11 +3026,11 @@ body.light .zone{color:rgba(46,32,13,.72)}
         }
 
         &--previous {
-            justify-self: end;
+            justify-content: flex-end;
         }
 
         &--next {
-            justify-self: start;
+            justify-content: flex-start;
         }
     }
 
@@ -3519,16 +3525,16 @@ body.light .zone{color:rgba(46,32,13,.72)}
         padding: 0 8px;
 
         &__number-row {
-            grid-template-columns: minmax(66px, 1fr) auto minmax(66px, 1fr);
-            gap: 5px;
+            grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr);
+            gap: 4px;
             margin-bottom: 8px;
         }
 
         &__navigation {
             padding: 0 6px;
+            transform: translateY(8px);
 
             strong {
-                max-width: 68px;
                 font-size: 13px;
             }
         }
