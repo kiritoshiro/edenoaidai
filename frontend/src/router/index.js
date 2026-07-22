@@ -22,6 +22,11 @@ const router = createRouter({
         ) {
             return false;
         }
+        // A hymn selected from any list should always open at its heading,
+        // even when browser history has a saved position for that route.
+        if (to.name === 'single' && from.name !== 'single') {
+            return { left: 0, top: 0 };
+        }
         // Previous/next hymn navigation should keep the controls under the
         // user's finger instead of jumping the document back to the top.
         if (
