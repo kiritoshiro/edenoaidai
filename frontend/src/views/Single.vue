@@ -1011,7 +1011,10 @@ export default {
             song: null,
             songIds: [],
             songCatalog: [],
-            imageType: 'jpg',
+            imageType:
+                localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
+            preferredNoteFormat:
+                localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
@@ -1318,9 +1321,9 @@ export default {
             localStorage.setItem('notesVisible', String(value));
         },
         availableNoteFormats(formats) {
-            if (!formats.includes(this.imageType)) {
-                this.imageType = formats[0] || 'jpg';
-            }
+            this.imageType = formats.includes(this.preferredNoteFormat)
+                ? this.preferredNoteFormat
+                : formats[0] || this.preferredNoteFormat;
         },
         audioTypes(types) {
             const requested = String(this.$route.query.audio || '');
@@ -2217,6 +2220,8 @@ body.light .zone{color:rgba(46,32,13,.72)}
         },
         selectNoteFormat(format) {
             if (!this.availableNoteFormats.includes(format)) return;
+            this.preferredNoteFormat = format;
+            localStorage.setItem('notesFormat', format);
             this.imageType = format;
             this.notesZoom = 1;
             this.$nextTick(() => this.resetNotesViewport());
