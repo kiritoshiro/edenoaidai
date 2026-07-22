@@ -2681,7 +2681,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 }
 
 .song-image--svg img {
-    background: #fff;
+    background: transparent;
 }
 
 :root[data-theme='dark'] .song-image--svg img {
@@ -2689,7 +2689,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 }
 
 .notes-viewer {
-    --notes-background: #eee9df;
+    --notes-background: var(--app-background);
     --notes-surface: rgba(255, 253, 248, 0.96);
     --notes-control: #fffdf8;
     --notes-text: #17130d;
@@ -2708,7 +2708,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
     background: var(--notes-background);
 
     &--dark {
-        --notes-background: #10151d;
         --notes-surface: rgba(24, 31, 42, 0.97);
         --notes-control: #252e3b;
         --notes-text: #f6f1e7;
@@ -3412,7 +3411,13 @@ body.light .zone{color:rgba(46,32,13,.72)}
 }
 
 .notes-viewer--dark.notes-viewer--svg .notes-viewer__viewport img {
+    background: transparent;
     filter: invert(1) hue-rotate(180deg) brightness(1.16) contrast(0.94);
+}
+
+.notes-viewer--svg .notes-viewer__viewport img {
+    background: transparent;
+    box-shadow: none;
 }
 
 @media (max-width: 560px) {
