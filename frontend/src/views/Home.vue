@@ -1,8 +1,17 @@
 <template>
-    <div>
-        <button class="update-button" @click="goToInstallPage">
-            Atnaujinti duomenis
-        </button>
+    <div class="public-page home-page">
+        <header class="page-header home-page__header">
+            <div>
+                <h1>Edeno Aidai</h1>
+                <p>Pasirinkite giesmę pagal numerį arba pavadinimą.</p>
+            </div>
+            <button class="update-button" @click="goToInstallPage">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6.2 6.2L4 8M5.5 15A7 7 0 0 0 17.8 17.8L20 16" />
+                </svg>
+                Atnaujinti
+            </button>
+        </header>
         <list :songs="songs" />
     </div>
 </template>
@@ -49,26 +58,56 @@ export default {
 };
 </script>
 
-<style>
-.update-button {
-    display: block;
-    width: 100%;
-    margin: 0 auto 10px;
-    padding: 10px 20px;
-    font-size: 16px;
-    background-color: var(--app-accent);
-    color: #2b2114;
-    border: 1px solid transparent;
-    border-radius: 12px;
-    cursor: pointer;
-    box-shadow: 2px 5px 10px 0 rgba(0, 0, 0, 0.1);
-    text-decoration: none;
-    text-align: center;
-    transition: box-shadow ease-in-out 0.2s;
+<style lang="scss">
+.home-page__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
 }
+
+.update-button {
+    display: inline-flex;
+    min-height: 44px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    padding: 0 13px;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    color: var(--app-muted);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-small);
+    font-weight: 700;
+    cursor: pointer;
+
+    svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+}
+
 .update-button:hover {
-    background-color: var(--app-accent-soft);
     color: var(--app-text);
-    box-shadow: 2px 5px 10px 0 rgba(0, 0, 0, 0.3);
+    background: var(--app-surface-soft);
+}
+
+@media (max-width: 560px) {
+    .home-page__header {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 13px;
+    }
+
+    .update-button {
+        align-self: flex-start;
+        margin-top: 0;
+    }
 }
 </style>

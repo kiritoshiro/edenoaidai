@@ -1,47 +1,17 @@
 <!-- eslint-disable vue/no-v-html -->
 <template>
     <div v-if="song" class="song">
-        <h2 class="song__title">{{ song.songId }} {{ song.title }}</h2>
-        <div class="song__buttons">
-            <button
-                class="song__navigation-button song__navigation-button--previous"
-                :disabled="!previousSongId"
-                :aria-label="previousSongId ? `Ankstesnė giesmė ${previousSongId}` : 'Ankstesnės giesmės nėra'"
-                @click="goTo(previousSongId)"
-            >
-                <span aria-hidden="true">←</span>
-                <span>{{ previousSongId || '—' }}</span>
-            </button>
+        <header class="song-topbar">
+            <router-link to="/" class="song-topbar__back">
+                <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m15 18-6-6 6-6" />
+                </svg>
+                <span>Visos giesmės</span>
+            </router-link>
 
-            <div class="song__action-group">
+            <div class="song-topbar__actions">
                 <button
-                    class="song__action-button"
-                    aria-label="Mažinti giesmės tekstą"
-                    title="Mažinti tekstą"
-                    @click="adjustFontSize(-1)"
-                >
-                    A−
-                </button>
-                <button
-                    class="song__action-button"
-                    aria-label="Didinti giesmės tekstą"
-                    title="Didinti tekstą"
-                    @click="adjustFontSize(1)"
-                >
-                    A+
-                </button>
-
-                <button
-                    v-if="sourceSlides.length"
-                    class="song__slideshow-button"
-                    @click="openSlideshow"
-                >
-                    <span class="song__slideshow-icon" aria-hidden="true">▤</span>
-                    <span class="song__slideshow-label">Skaidrės</span>
-                </button>
-
-                <button
-                    class="song__favorite-button"
+                    class="song-topbar__icon-button song__favorite-button"
                     :class="{ 'is-active': song.favorited }"
                     :aria-label="song.favorited ? 'Pašalinti iš išsaugotų' : 'Išsaugoti giesmę'"
                     :title="song.favorited ? 'Išsaugota' : 'Išsaugoti'"
@@ -54,39 +24,80 @@
                 </button>
 
                 <button
-                    class="song__theme-button"
+                    class="song-topbar__icon-button song__theme-button"
                     :aria-label="isDark ? 'Įjungti šviesią temą' : 'Įjungti tamsią temą'"
                     :title="isDark ? 'Šviesi tema' : 'Tamsi tema'"
                     @click="toggleTheme"
                 >
                     <span aria-hidden="true">{{ isDark ? '☀' : '☾' }}</span>
-                    <span class="song__theme-label">
-                        {{ isDark ? 'Šviesi' : 'Tamsi' }}
-                    </span>
+                </button>
+            </div>
+        </header>
+
+        <section class="song-heading" aria-labelledby="song-title">
+            <span class="song-heading__number">
+                <span class="song-heading__number-label">Giesmė</span>
+                <span class="song-heading__number-value">{{ song.songId }}</span>
+            </span>
+            <h1 id="song-title">{{ song.title }}</h1>
+            <p v-if="song.verse" class="song-heading__verse">
+                <em>{{ song.verse }}</em>
+            </p>
+        </section>
+
+        <section class="song-switcher" aria-label="Giesmės navigacija ir veiksmai">
+            <button
+                class="song-switcher__navigation song-switcher__navigation--previous"
+                :disabled="!previousSongId"
+                :aria-label="previousSongId ? `Ankstesnė giesmė ${previousSongId}` : 'Ankstesnės giesmės nėra'"
+                @click="goTo(previousSongId)"
+            >
+                <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m15 18-6-6 6-6" />
+                </svg>
+                <span>
+                    <small>Ankstesnė</small>
+                    <strong>Nr. {{ previousSongId || '—' }}</strong>
+                </span>
+            </button>
+
+            <div class="song-switcher__actions">
+                <button
+                    v-if="sourceSlides.length"
+                    class="song__slideshow-button song-switcher__slideshow"
+                    @click="openSlideshow"
+                >
+                    <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="13" rx="2" />
+                        <path d="M8 21h8M12 17v4M7 8h10M7 12h7" />
+                    </svg>
+                    Skaidrės
                 </button>
             </div>
 
             <button
-                class="song__navigation-button song__navigation-button--next"
+                class="song-switcher__navigation song-switcher__navigation--next"
                 :disabled="!nextSongId"
                 :aria-label="nextSongId ? `Kita giesmė ${nextSongId}` : 'Kitos giesmės nėra'"
                 @click="goTo(nextSongId)"
             >
-                <span>{{ nextSongId || '—' }}</span>
-                <span aria-hidden="true">→</span>
+                <span>
+                    <small>Kita</small>
+                    <strong>Nr. {{ nextSongId || '—' }}</strong>
+                </span>
+                <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m9 18 6-6-6-6" />
+                </svg>
             </button>
-        </div>
-        <p class="song__verse">
-            <em>{{ song.verse }}</em>
-        </p>
+        </section>
 
-        <section v-if="audioTypes.length" class="song-audio" aria-label="Giesmės įrašas">
+        <section v-if="audioTypes.length" class="song-audio song-panel" aria-labelledby="song-audio-title">
             <div class="song-audio__header">
                 <div class="song-audio__icon" aria-hidden="true">
                     <song-icon :name="selectedAudioType" />
                 </div>
                 <label v-if="audioTypes.length > 1" class="song-audio__version">
-                    <span>Įrašo versija</span>
+                    <span id="song-audio-title">Klausytis</span>
                     <select v-model="selectedAudioType">
                         <option v-for="type in audioTypes" :key="type" :value="type">
                             {{ audioTypeLabel(type) }}
@@ -94,7 +105,7 @@
                     </select>
                 </label>
                 <div v-else class="song-audio__version song-audio__version--single">
-                    <span>Įrašo versija</span>
+                    <span id="song-audio-title">Klausytis</span>
                     <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
                 </div>
             </div>
@@ -150,18 +161,80 @@
             </div>
         </section>
 
-        <div style="text-align: center; margin-top: 20px">
-            <div
-                class="song__body"
-                :style="fontSizeStyle"
-                v-html="song.body"
-            ></div>
-        </div>
+        <article class="song-lyrics song-panel" aria-labelledby="song-lyrics-title">
+            <header class="song-lyrics__header">
+                <h2 id="song-lyrics-title">Giesmės žodžiai</h2>
+                <div class="song-lyrics__text-size" aria-label="Teksto dydis">
+                    <button
+                        type="button"
+                        aria-label="Mažinti giesmės tekstą"
+                        @click="adjustFontSize(-2)"
+                    >
+                        A−
+                    </button>
+                    <span>{{ fontSizePercent }}%</span>
+                    <button
+                        type="button"
+                        aria-label="Didinti giesmės tekstą"
+                        @click="adjustFontSize(2)"
+                    >
+                        A+
+                    </button>
+                </div>
+            </header>
 
-        <section v-if="hasNotes" class="song-notes">
-            <div class="song-notes__header">
-                <h3>Natos</h3>
-                <div class="song-notes__actions">
+            <div class="song__body" :style="fontSizeStyle">
+                <section
+                    v-for="(block, index) in readingBlocks"
+                    :key="`${block.isChorus ? 'chorus' : 'verse'}-${index}`"
+                    :class="block.isChorus ? 'song-chorus' : 'song-stanza'"
+                >
+                    <template v-if="block.isChorus">
+                        <span class="song-chorus__label">Priegiesmis</span>
+                        <div class="song-chorus__text">{{ block.text }}</div>
+                    </template>
+                    <template v-else>
+                        <span class="song-stanza__number">{{ block.number }}.</span>
+                        <div class="song-stanza__text">{{ block.text }}</div>
+                    </template>
+                </section>
+            </div>
+        </article>
+
+        <section v-if="hasNotes" class="song-notes song-panel">
+            <div class="song-notes__summary">
+                <button
+                    type="button"
+                    class="song-notes__main"
+                    :aria-expanded="notesVisible"
+                    @click="notesVisible = !notesVisible"
+                >
+                    <span class="song-notes__icon" aria-hidden="true">♫</span>
+                    <span class="song-notes__copy">
+                        <strong>Natos</strong>
+                        <small>
+                            {{ availableNoteFormats.length }}
+                            {{ availableNoteFormats.length === 1 ? 'formatas' : 'formatai' }}
+                            · {{ imageUrls.length }}
+                            {{ imageUrls.length === 1 ? 'puslapis' : 'puslapiai' }}
+                        </small>
+                    </span>
+                    <span class="song-notes__chevron" aria-hidden="true">⌄</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="song-notes__fullscreen"
+                    @click="openNotesFullscreen"
+                >
+                    <span aria-hidden="true">⛶</span>
+                    Per visą ekraną
+                </button>
+            </div>
+
+            <div v-show="notesVisible" class="song-notes__content">
+                <div class="song-notes__format-row">
+                    <span>Natų formatas</span>
                     <div
                         v-if="availableNoteFormats.length > 1"
                         class="image-format-container"
@@ -172,7 +245,6 @@
                             :key="format"
                             type="button"
                             :class="[
-                                'song__font-size-button',
                                 'image-format-button',
                                 { selected: imageType === format },
                             ]"
@@ -181,46 +253,41 @@
                             {{ noteFormatLabel(format) }}
                         </button>
                     </div>
-                    <button
-                        type="button"
-                        class="song-notes__toggle"
-                        :aria-expanded="notesVisible"
-                        @click="notesVisible = !notesVisible"
-                    >
-                        <span aria-hidden="true">{{ notesVisible ? '▴' : '▾' }}</span>
-                        {{ notesVisible ? 'Slėpti natas' : 'Rodyti natas' }}
-                    </button>
-                    <button
-                        type="button"
-                        class="song-notes__fullscreen"
-                        @click="openNotesFullscreen"
-                    >
-                        <span aria-hidden="true">⛶</span>
-                        Per visą ekraną
-                    </button>
+                    <strong v-else class="song-notes__single-format">
+                        {{ noteFormatLabel(availableNoteFormats[0]) }}
+                    </strong>
                 </div>
-            </div>
 
-            <div
-                v-show="notesVisible"
-                class="song-image"
-                :class="{ 'song-image--svg': imageType === 'svg' }"
-            >
-                <div v-for="(url, index) in imageUrls" :key="url">
-                    <div v-if="!imageLoaded[index]" class="image-loader"></div>
-                    <img
-                        v-if="!imageErrored[index]"
-                        v-show="imageLoaded[index]"
-                        :src="url"
-                        :alt="`Giesmės ${song.songId} natų ${index + 1} puslapis`"
-                        @load="imageLoaded[index] = true"
-                        @error="onImageError(index)"
-                    />
+                <div
+                    class="song-image"
+                    :class="{ 'song-image--svg': imageType === 'svg' }"
+                >
+                    <div v-for="(url, index) in imageUrls" :key="url">
+                        <div v-if="!imageLoaded[index]" class="image-loader"></div>
+                        <img
+                            v-if="!imageErrored[index]"
+                            v-show="imageLoaded[index]"
+                            :src="url"
+                            :alt="`Giesmės ${song.songId} natų ${index + 1} puslapis`"
+                            @load="imageLoaded[index] = true"
+                            @error="onImageError(index)"
+                        />
+                    </div>
                 </div>
             </div>
         </section>
 
-        <small class="song__copyright" v-html="song.copyright"></small>
+        <section
+            v-if="song.copyright"
+            class="song-details song-panel"
+            aria-labelledby="song-details-title"
+        >
+            <div class="song-details__icon" aria-hidden="true">i</div>
+            <div>
+                <h2 id="song-details-title">Apie giesmę</h2>
+                <div class="song-details__content" v-html="song.copyright"></div>
+            </div>
+        </section>
     </div>
 
     <Teleport to="body">
@@ -797,7 +864,7 @@ export default {
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
-            notesVisible: localStorage.getItem('notesVisible') !== 'false',
+            notesVisible: localStorage.getItem('notesVisible') === 'true',
             notesPageIndex: 0,
             notesZoom: 1,
             previousNotesBodyOverflow: '',
@@ -856,6 +923,9 @@ export default {
         },
         fontSizeStyle() {
             return { fontSize: `${this.fontSize}px` };
+        },
+        fontSizePercent() {
+            return Math.round((this.fontSize / 24) * 100);
         },
         audioTypes() {
             return Array.isArray(this.song?.lists)
@@ -936,6 +1006,29 @@ export default {
                       .filter(slide => slide.text !== '')
                 : [];
             return saved.length > 0 ? saved : slidesFromBody(this.song.body);
+        },
+        readingBlocks() {
+            let verseNumber = 0;
+            return this.sourceSlides.map(slide => {
+                if (slide.isChorus) {
+                    return {
+                        text: slide.text,
+                        isChorus: true,
+                    };
+                }
+
+                verseNumber += 1;
+                const numbered = String(slide.text || '').match(
+                    /^\s*(\d+)[.)]\s*/u,
+                );
+                return {
+                    text: numbered
+                        ? String(slide.text).slice(numbered[0].length)
+                        : slide.text,
+                    isChorus: false,
+                    number: numbered ? numbered[1] : verseNumber,
+                };
+            });
         },
         slideshowSequence() {
             const choruses = this.sourceSlides.filter(slide => slide.isChorus);
@@ -1840,14 +1933,6 @@ export default {
 </script>
 
 <style lang="scss">
-%button-shadow {
-    border: 1px solid var(--app-border);
-    border-radius: 20px;
-    color: var(--app-text);
-    background-color: var(--app-surface);
-    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.12);
-}
-
 .image-format-container {
     display: flex;
     align-items: center;
@@ -1878,68 +1963,6 @@ export default {
 .image-format-button:hover:not(.selected) {
     background-color: var(--app-hover);
     color: var(--app-text);
-}
-
-.song__navigation-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    min-width: 70px;
-    min-height: 46px;
-    padding: 8px 13px;
-    border: 0;
-    border-radius: 13px;
-    color: var(--app-text);
-    background: var(--app-surface-soft);
-    font-size: 17px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background-color 0.18s ease, transform 0.18s ease;
-}
-
-.song__navigation-button:focus {
-    outline: none;
-}
-
-.song__navigation-button:hover:not([disabled]) {
-    background-color: var(--app-hover);
-    transform: translateY(-1px);
-}
-
-.song__slideshow-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 42px;
-    padding: 8px 13px;
-    border: 0;
-    border-radius: 11px;
-    color: #2b2114;
-    background: #d9b26f;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.song__action-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-right: 1px solid var(--app-border);
-    border-left: 1px solid var(--app-border);
-}
-
-.song__action-button {
-    min-width: 42px;
-    min-height: 42px;
-    padding: 7px;
-    border: 0;
-    border-radius: 11px;
-    color: var(--app-text);
-    background: transparent;
-    font-weight: 700;
-    cursor: pointer;
 }
 
 .song-audio {
@@ -2084,53 +2107,6 @@ export default {
 
         input {
             width: 62px;
-        }
-    }
-}
-
-.song-notes {
-    width: min(1120px, 100%);
-    margin: 28px auto 12px;
-
-    &__header,
-    &__actions {
-        display: flex;
-        align-items: center;
-    }
-
-    &__header {
-        justify-content: space-between;
-        gap: 14px;
-        margin: 0 20px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid var(--app-border);
-
-        h3 {
-            margin: 0;
-            font-size: 20px;
-        }
-    }
-
-    &__actions {
-        gap: 8px;
-    }
-
-    &__fullscreen,
-    &__toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        min-height: 40px;
-        padding: 7px 13px;
-        border: 1px solid var(--app-border);
-        border-radius: 20px;
-        color: var(--app-text);
-        background: var(--app-surface-soft);
-        font-weight: 700;
-        cursor: pointer;
-
-        &:hover {
-            background: var(--app-hover);
         }
     }
 }
@@ -2325,100 +2301,7 @@ export default {
     }
 }
 
-.song__buttons button[disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.song__buttons button:hover:not([disabled]) {
-    background-color: var(--app-hover);
-}
-
 .song {
-    &__title {
-        font-size: 20px;
-        text-align: center;
-        width: auto;
-        margin: 0 0 10px;
-        padding: 2px 70px 12px;
-        border-bottom: 1px solid var(--app-border);
-    }
-
-    &__verse {
-        font-size: 16px;
-        text-align: center;
-        margin: 0 0 20px;
-    }
-
-    &__body {
-        display: inline-block;
-        text-align: left;
-        font-size: 24px;
-        margin-bottom: 20px;
-    }
-
-    &__buttons {
-        justify-content: space-between;
-        align-items: center;
-        display: flex;
-        gap: 6px;
-        width: min(720px, 100%);
-        box-sizing: border-box;
-        margin: 12px auto 14px;
-        padding: 7px;
-        border: 1px solid var(--app-border);
-        border-radius: 18px;
-        background: var(--app-surface);
-        box-shadow: var(--app-shadow);
-    }
-
-    &__favorite-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 42px;
-        min-height: 42px;
-        font-size: 20px;
-        line-height: 1;
-        padding: 7px;
-        border: none;
-        border-radius: 11px;
-        color: rgba(228, 179, 99, 1);
-        background: transparent;
-        cursor: pointer;
-
-        &.is-active {
-            background: var(--app-accent-soft);
-        }
-    }
-
-    &__theme-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        min-height: 42px;
-        padding: 7px 10px;
-        border: 0;
-        border-radius: 11px;
-        color: var(--app-text);
-        background: transparent;
-        font-weight: 700;
-        cursor: pointer;
-    }
-
-    &__font-size-button {
-        font-size: 16px;
-        line-height: 1.5;
-        @extend %button-shadow;
-    }
-
-    &__copyright {
-        text-align: center;
-        justify-content: center;
-        display: flex;
-    }
-
     .icon-audio {
         display: block;
         margin: 0 auto;
@@ -2452,61 +2335,519 @@ export default {
     }
 }
 
+.song {
+    width: min(920px, 100%);
+    margin: 0 auto;
+}
+
+.song-ui-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.song-panel {
+    border: 1px solid var(--app-border);
+    border-radius: 20px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow);
+}
+
+.song-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    margin-bottom: 16px;
+
+    &__back {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px 0 8px;
+        border-radius: 12px;
+        color: var(--app-muted);
+        font-weight: 650;
+        text-decoration: none;
+
+        &:hover {
+            color: var(--app-text);
+            background: var(--app-surface-soft);
+        }
+    }
+
+    &__actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    &__icon-button {
+        display: inline-grid;
+        width: 44px;
+        min-width: 44px !important;
+        height: 44px;
+        min-height: 44px !important;
+        padding: 0 !important;
+        place-items: center;
+        border: 0;
+        border-radius: 50% !important;
+        color: var(--app-muted);
+        background: transparent;
+        cursor: pointer;
+
+        &:hover {
+            color: var(--app-text);
+            background: var(--app-surface-soft);
+        }
+
+        &.is-active {
+            color: var(--app-accent-strong);
+            background: var(--app-accent-soft);
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+        }
+    }
+}
+
+.song-heading {
+    max-width: 720px;
+    margin: 0 auto 20px;
+    text-align: center;
+
+    &__number {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 15px;
+        color: var(--app-accent-strong);
+        line-height: 1;
+    }
+
+    &__number-label {
+        margin-bottom: 4px;
+        color: var(--app-muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    &__number-value {
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: clamp(50px, 9vw, 70px);
+        font-weight: 600;
+        letter-spacing: -0.04em;
+    }
+
+    h1 {
+        margin: 0;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: clamp(30px, 5vw, 45px);
+        font-weight: 600;
+        line-height: 1.1;
+        text-wrap: balance;
+    }
+
+    &__verse {
+        max-width: 610px;
+        margin: 14px auto 0;
+        color: var(--app-muted);
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 16px;
+        line-height: 1.5;
+    }
+}
+
+.song-switcher {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    margin: 0 auto 18px;
+
+    &__navigation {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 10px;
+        min-height: 64px;
+        padding: 8px 14px;
+        border: 1px solid var(--app-border);
+        border-radius: 15px;
+        color: var(--app-text);
+        background: var(--app-surface);
+        box-shadow: 0 7px 20px rgba(65, 49, 27, 0.08);
+        text-align: left;
+        cursor: pointer;
+        transition: transform 0.16s ease, border-color 0.16s ease;
+
+        &:hover:not(:disabled) {
+            border-color: color-mix(in srgb, var(--app-accent) 50%, transparent);
+            background: var(--app-surface);
+            transform: translateY(-1px);
+        }
+
+        &:disabled {
+            opacity: 0.42;
+            cursor: default;
+        }
+
+        small,
+        strong {
+            display: block;
+        }
+
+        small {
+            margin-bottom: 2px;
+            color: var(--app-muted);
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: 0.055em;
+            text-transform: uppercase;
+        }
+
+        strong {
+            font-size: 15px;
+        }
+
+        &--next {
+            grid-template-columns: 1fr auto;
+            text-align: right;
+        }
+    }
+
+    &__actions {
+        display: flex;
+        align-items: center;
+        padding: 5px;
+        border: 1px solid var(--app-border);
+        border-radius: 15px;
+        background: var(--app-surface);
+        box-shadow: 0 7px 20px rgba(65, 49, 27, 0.08);
+    }
+
+    &__slideshow {
+        display: inline-flex;
+        min-height: 52px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        border: 1px solid color-mix(in srgb, var(--app-accent) 34%, transparent);
+        border-radius: 11px;
+        color: var(--app-accent-strong);
+        background: var(--app-accent-soft);
+        font-size: 15px;
+        font-weight: 750;
+
+        &:hover {
+            border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
+            color: var(--app-accent-strong);
+            background: var(--app-surface-soft);
+        }
+    }
+}
+
+.song-audio.song-panel {
+    width: 100%;
+    margin: 0 0 16px;
+    box-sizing: border-box;
+}
+
+.song-lyrics {
+    margin-bottom: 16px;
+    overflow: hidden;
+
+    &__header {
+        display: flex;
+        min-height: 64px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--app-border);
+
+        h2 {
+            margin: 0;
+            font-size: 16px;
+        }
+    }
+
+    &__text-size {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 3px;
+        border-radius: 12px;
+        background: var(--app-surface-soft);
+
+        button {
+            display: grid;
+            min-width: 40px;
+            height: 38px;
+            padding: 0;
+            place-items: center;
+            border: 0;
+            border-radius: 9px;
+            color: var(--app-text);
+            background: transparent;
+            font-weight: 800;
+            cursor: pointer;
+
+            &:hover {
+                background: var(--app-surface);
+            }
+        }
+
+        span {
+            min-width: 46px;
+            color: var(--app-muted);
+            font-size: 11px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+    }
+}
+
+.song .song__body {
+    display: block;
+    width: fit-content;
+    max-width: min(100%, 592px);
+    margin: 0 auto;
+    padding: clamp(28px, 6vw, 56px) 24px clamp(38px, 8vw, 72px);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.7;
+    text-align: left;
+}
+
+.song-stanza {
+    display: grid;
+    grid-template-columns: 2.4em minmax(0, 1fr);
+    column-gap: 0.7em;
+    margin: 0 0 1.7em;
+
+    &:last-child {
+        margin-bottom: 0;
+    }
+
+    &__number {
+        color: var(--app-accent-strong);
+        font-family: Avenir, Helvetica, Arial, sans-serif;
+        font-size: 0.82em;
+        font-weight: 800;
+        line-height: 2.05;
+        text-align: right;
+    }
+
+    &__text {
+        min-width: 0;
+        white-space: pre-line;
+    }
+}
+
+.song-chorus {
+    margin: 0.25em 0 1.8em 3.1em;
+    padding: 0.8em 0 0.8em 1.1em;
+    border-left: 3px solid var(--app-accent);
+
+    &__label {
+        display: block;
+        margin-bottom: 0.45rem;
+        color: var(--app-accent-strong);
+        font-family: Avenir, Helvetica, Arial, sans-serif;
+        font-size: 0.58em;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    &__text {
+        white-space: pre-line;
+    }
+}
+
+.song-notes.song-panel {
+    width: 100%;
+    margin: 0 0 16px;
+    overflow: hidden;
+}
+
+.song-notes {
+    &__summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    &__main {
+        display: grid;
+        grid-template-columns: 46px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        min-height: 60px;
+        padding: 4px 10px;
+        border: 0;
+        border-radius: 13px;
+        color: var(--app-text);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--app-surface-soft);
+        }
+    }
+
+    &__icon {
+        display: grid;
+        width: 46px;
+        height: 46px;
+        place-items: center;
+        border-radius: 13px;
+        color: var(--app-accent-strong);
+        background: var(--app-accent-soft);
+        font-size: 21px;
+    }
+
+    &__copy {
+        min-width: 0;
+
+        strong,
+        small {
+            display: block;
+        }
+
+        small {
+            margin-top: 3px;
+            color: var(--app-muted);
+        }
+    }
+
+    &__chevron {
+        font-size: 21px;
+        transition: transform 0.18s ease;
+    }
+
+    &__main[aria-expanded='true'] &__chevron {
+        transform: rotate(180deg);
+    }
+
+    &__fullscreen {
+        display: inline-flex;
+        min-height: 48px;
+        align-items: center;
+        align-self: center;
+        gap: 7px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 11px;
+        color: var(--app-text);
+        background: var(--app-surface-soft);
+        font-weight: 750;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--app-hover);
+        }
+    }
+
+    &__content {
+        padding: 4px 20px 22px;
+        border-top: 1px solid var(--app-border);
+    }
+
+    &__format-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 0;
+        color: var(--app-muted);
+        font-size: 13px;
+    }
+
+    &__single-format {
+        color: var(--app-text);
+    }
+}
+
+.song-notes .image-format-container {
+    gap: 3px;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--app-surface-soft);
+}
+
+.song-notes .image-format-button {
+    min-width: 52px;
+    min-height: 34px;
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: none;
+    color: var(--app-muted);
+    background: transparent;
+    font-size: 13px;
+
+    &.selected {
+        color: var(--app-text);
+        background: var(--app-surface);
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.08);
+    }
+}
+
+.song-notes .song-image {
+    margin: 8px 0 0;
+}
+
+.song-details {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px 20px;
+    box-shadow: 0 7px 20px rgba(65, 49, 27, 0.08);
+
+    &__icon {
+        display: grid;
+        width: 46px;
+        height: 46px;
+        place-items: center;
+        border-radius: 13px;
+        color: var(--app-muted);
+        background: var(--app-surface-soft);
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 20px;
+        font-style: italic;
+        font-weight: 700;
+    }
+
+    h2 {
+        margin: 1px 0 8px;
+        font-size: 15px;
+    }
+
+    &__content {
+        color: var(--app-muted);
+        font-size: 13px;
+        line-height: 1.65;
+    }
+}
+
 .notes-viewer--dark.notes-viewer--svg .notes-viewer__viewport img {
     filter: invert(1) hue-rotate(180deg) brightness(1.16) contrast(0.94);
 }
 
 @media (max-width: 560px) {
-    .song {
-        &__title {
-            padding-right: 8px;
-            padding-left: 8px;
-        }
-
-        &__buttons {
-            gap: 3px;
-            padding: 5px;
-            border-radius: 15px;
-        }
-    }
-
-    .song__navigation-button {
-        min-width: 49px;
-        min-height: 42px;
-        gap: 4px;
-        padding: 6px 7px;
-        font-size: 15px;
-    }
-
-    .song__action-group {
-        gap: 1px;
-        padding: 2px 4px;
-    }
-
-    .song__action-button,
-    .song__favorite-button,
-    .song__theme-button {
-        min-width: 34px;
-        min-height: 38px;
-        padding: 5px;
-    }
-
-    .song__theme-label {
-        display: none;
-    }
-
-    .song__slideshow-button {
-        min-width: 68px;
-        min-height: 38px;
-        gap: 4px;
-        padding: 6px 7px;
-        font-size: 12px;
-    }
-
-    .song__slideshow-icon {
-        font-size: 16px;
-    }
-
     .song-audio {
         grid-template-columns: 1fr;
         gap: 13px;
@@ -2524,25 +2865,6 @@ export default {
             flex-basis: 42px;
             width: 42px;
             height: 42px;
-        }
-    }
-
-    .song-notes {
-        &__header {
-            align-items: flex-start;
-            flex-direction: column;
-            margin-right: 12px;
-            margin-left: 12px;
-        }
-
-        &__actions {
-            width: 100%;
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
-
-        &__fullscreen {
-            margin-left: auto;
         }
     }
 
@@ -2586,6 +2908,148 @@ export default {
                 right: 0;
             }
         }
+    }
+}
+
+@media (max-width: 680px) {
+    .song-topbar {
+        margin-bottom: 10px;
+    }
+
+    .song-heading {
+        margin-bottom: 18px;
+        padding: 0 8px;
+
+        &__number {
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            font-size: clamp(28px, 8vw, 36px);
+        }
+
+        &__verse {
+            font-size: 15px;
+        }
+    }
+
+    .song-switcher {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+
+        &__actions {
+            grid-column: 1 / -1;
+            grid-row: 1;
+        }
+
+        &__slideshow {
+            width: 100%;
+            min-height: 46px;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        &__navigation {
+            min-width: 0;
+            min-height: 56px;
+            padding: 6px 10px;
+            box-shadow: none;
+
+            small {
+                font-size: 10px;
+            }
+
+            strong {
+                font-size: 14px;
+            }
+        }
+    }
+
+    .song-audio.song-panel {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        padding: 15px;
+    }
+
+    .song-lyrics {
+        &__header {
+            min-height: 58px;
+            padding: 8px 12px;
+        }
+    }
+
+    .song .song__body {
+        padding: 32px 16px 48px 10px;
+        line-height: 1.65;
+    }
+
+    .song-stanza {
+        grid-template-columns: 2em minmax(0, 1fr);
+        column-gap: 0.55em;
+    }
+
+    .song-chorus {
+        margin-left: 2.55em;
+    }
+
+    .song-notes {
+        &__summary {
+            grid-template-columns: 1fr;
+            gap: 4px;
+            padding: 7px;
+        }
+
+        &__main {
+            grid-template-columns: 42px minmax(0, 1fr) auto;
+            min-height: 56px;
+            padding: 4px 7px;
+        }
+
+        &__icon {
+            width: 42px;
+            height: 42px;
+        }
+
+        &__fullscreen {
+            width: 100%;
+            justify-content: center;
+        }
+
+        &__content {
+            padding: 4px 10px 14px;
+        }
+
+        &__format-row {
+            padding-right: 4px;
+            padding-left: 4px;
+        }
+    }
+
+    .song-details {
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 11px;
+        padding: 15px;
+
+        &__icon {
+            width: 42px;
+            height: 42px;
+        }
+    }
+}
+
+@media (max-width: 390px) {
+    .song-topbar__back {
+        width: 44px;
+        justify-content: center;
+        padding: 0;
+
+        span {
+            display: none;
+        }
+    }
+
+    .song-lyrics__text-size > span {
+        display: none;
     }
 }
 

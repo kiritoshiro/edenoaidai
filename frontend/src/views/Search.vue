@@ -1,14 +1,40 @@
 <template>
-    <div class="form">
-        <div class="input-container">
+    <div class="public-page search-page">
+        <header class="page-header">
+            <h1>Paieška</h1>
+            <p>Ieškokite pagal giesmės numerį, pavadinimą arba žodžius.</p>
+        </header>
+
+        <div class="search-box">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-4-4" />
+            </svg>
             <input
                 type="text"
-                placeholder="Rašykite čia..."
+                placeholder="Giesmės numeris, pavadinimas ar žodžiai"
                 :value="query"
+                aria-label="Ieškoti giesmės"
                 @input="onInput"
             />
         </div>
-        <list :songs="songs" />
+
+        <p v-if="query && songs.length" class="search-page__count">
+            Rasta: {{ songs.length }}
+        </p>
+        <list v-if="songs.length" :songs="songs" />
+
+        <div v-else-if="query" class="empty-state">
+            <div>
+                <h2>Giesmių nerasta</h2>
+                <p>Patikrinkite įrašą arba pabandykite trumpesnę frazę.</p>
+            </div>
+        </div>
+
+        <div v-else class="search-page__hint">
+            <span aria-hidden="true">⌕</span>
+            <p>Pradėkite rašyti – rezultatai pasirodys čia.</p>
+        </div>
     </div>
 </template>
 
@@ -131,44 +157,76 @@ export default {
 </script>
 
 <style lang="scss">
-.form {
+.search-box {
     display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 58px;
+    margin-bottom: 18px;
+    padding: 0 16px;
+    border: 1px solid var(--app-border);
+    border-radius: 17px;
+    color: var(--app-muted);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-small);
 
-    margin: 0 10px;
+    &:focus-within {
+        border-color: var(--app-accent);
+        box-shadow: 0 0 0 3px var(--app-accent-soft);
+    }
 
-    grid-gap: 20px;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
+    svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
 
-    .input-container {
-        display: grid;
-
-        grid-gap: 5px;
-        grid-auto-flow: row;
-
+    input {
+        width: 100%;
+        min-height: 56px;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        color: var(--app-text);
+        background: transparent;
         font-size: 16px;
 
-        input {
-            width: 100%;
+        &::placeholder {
+            color: var(--app-muted);
+        }
+    }
+}
 
-            box-sizing: border-box;
-            border-radius: 10px;
+.search-page {
+    &__count {
+        margin: -5px 4px 12px;
+        color: var(--app-muted);
+        font-size: 13px;
+    }
 
-            padding: 10px;
+    &__hint {
+        display: grid;
+        min-height: 190px;
+        place-items: center;
+        padding: 24px;
+        color: var(--app-muted);
+        text-align: center;
 
-            color: var(--app-text);
-            background: var(--app-surface);
-            border: 1px solid var(--app-border);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        span {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--app-accent-strong);
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 42px;
+        }
 
-            &::placeholder {
-                color: var(--app-muted);
-            }
-
-            &:focus {
-                outline: 2px solid var(--app-accent);
-                outline-offset: 2px;
-            }
+        p {
+            margin: 0;
         }
     }
 }

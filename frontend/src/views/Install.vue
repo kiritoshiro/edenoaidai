@@ -1,18 +1,41 @@
 <template>
-    <div class="install-message">
-        <template v-if="status === 'ready'">Paruošta!</template>
+    <div class="public-page install-page">
+        <section class="install-message" :class="`is-${status || 'working'}`">
+            <div class="install-message__icon" aria-hidden="true">
+                <span v-if="status === 'ready'">✓</span>
+                <span v-else-if="status === 'error'">!</span>
+                <span v-else class="install-spinner"></span>
+            </div>
 
-        <template v-else-if="status === 'error'">
-            <p>Įvyko klaida: {{ error }}</p>
-            <button class="update-button install-retry" @click="start">
-                Bandyti dar kartą
-            </button>
-        </template>
+            <template v-if="status === 'ready'">
+                <h1>Paruošta!</h1>
+                <p>Giesmių duomenys atnaujinti.</p>
+            </template>
 
-        <template v-else>
-            <p>{{ message }}</p>
-            <p v-if="total">{{ current }}/{{ total }}</p>
-        </template>
+            <template v-else-if="status === 'error'">
+                <h1>Nepavyko atnaujinti</h1>
+                <p>{{ error }}</p>
+                <button class="install-retry" @click="start">
+                    Bandyti dar kartą
+                </button>
+            </template>
+
+            <template v-else>
+                <h1>Atnaujinami duomenys</h1>
+                <p>{{ message }}</p>
+                <div
+                    v-if="total"
+                    class="install-progress"
+                    role="progressbar"
+                    :aria-valuenow="current"
+                    aria-valuemin="0"
+                    :aria-valuemax="total"
+                >
+                    <span :style="{ width: `${Math.round((current / total) * 100)}%` }"></span>
+                </div>
+                <small v-if="total">{{ current }} / {{ total }}</small>
+            </template>
+        </section>
     </div>
 </template>
 
@@ -247,11 +270,107 @@ export default {
 };
 </script>
 
-<style>
-.install-message {
-    text-align: center;
+<style lang="scss">
+.install-page {
+    display: grid;
+    min-height: calc(100vh - 160px);
+    place-items: center;
 }
+
+.install-message {
+    width: min(520px, 100%);
+    padding: 42px 28px;
+    border: 1px solid var(--app-border);
+    border-radius: 22px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow);
+    text-align: center;
+
+    &__icon {
+        display: grid;
+        width: 58px;
+        height: 58px;
+        margin: 0 auto 18px;
+        place-items: center;
+        border-radius: 18px;
+        color: var(--app-accent-strong);
+        background: var(--app-accent-soft);
+        font-size: 27px;
+        font-weight: 800;
+    }
+
+    h1 {
+        margin: 0;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 30px;
+        font-weight: 600;
+    }
+
+    p {
+        margin: 10px auto 0;
+        color: var(--app-muted);
+        line-height: 1.55;
+    }
+
+    small {
+        display: block;
+        margin-top: 9px;
+        color: var(--app-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    &.is-error &__icon {
+        color: #a43b32;
+        background: rgba(178, 61, 49, 0.12);
+    }
+}
+
+.install-spinner {
+    width: 25px;
+    height: 25px;
+    border: 3px solid color-mix(in srgb, var(--app-accent) 28%, transparent);
+    border-top-color: var(--app-accent-strong);
+    border-radius: 50%;
+    animation: install-spin 0.9s linear infinite;
+}
+
+.install-progress {
+    height: 8px;
+    margin-top: 22px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--app-surface-soft);
+
+    span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--app-accent);
+        transition: width 0.2s ease;
+    }
+}
+
 .install-retry {
-    max-width: 300px;
+    min-height: 44px;
+    margin-top: 20px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 12px;
+    color: #251a0a;
+    background: var(--app-accent);
+    font-weight: 750;
+    cursor: pointer;
+}
+
+@keyframes install-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .install-spinner {
+        animation-duration: 2s;
+    }
 }
 </style>

@@ -62,88 +62,125 @@ export default {
 </script>
 
 <style lang="scss">
+.list {
+    display: grid;
+    gap: 10px;
+}
+
 .element {
     display: grid;
-
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 58px minmax(0, 1fr) auto;
     align-items: center;
-
-    font-size: 16px;
-    line-height: 1.5;
-
-    color: var(--app-text);
-    text-decoration: none;
-
+    min-height: 66px;
     overflow: hidden;
-    background-color: var(--app-surface);
     border: 1px solid var(--app-border);
-    border-radius: 14px;
-    box-shadow: 0 5px 18px rgba(47, 38, 26, 0.06);
-
-    margin: 10px 0;
+    border-radius: 16px;
+    color: var(--app-text);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-small);
+    font-size: 16px;
+    line-height: 1.45;
+    text-decoration: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease,
+        transform 0.18s ease;
 
     &__number {
-        display: flex;
-
-        align-self: stretch;
+        display: inline-flex;
+        min-width: 42px;
+        min-height: 42px;
         align-items: center;
-
-        padding: 0 15px;
-
-        min-width: 32px;
         justify-content: center;
-        background-color: var(--app-accent);
-        color: #2b2114;
-        font-weight: 700;
+        justify-self: center;
+        padding: 4px 7px;
+        border-radius: 12px;
+        color: var(--app-accent-strong);
+        background: var(--app-accent-soft);
+        font-size: 15px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
     }
 
     &__title {
-        display: inline-block;
-        text-align: left;
-
-        padding: 10px;
+        min-width: 0;
+        padding: 12px 8px 12px 2px;
         margin: 0;
+        font-weight: 650;
     }
-
-    transition: box-shadow ease-in-out 0.2s;
 
     &:hover {
-        background-color: var(--app-hover);
-        box-shadow: 0 10px 24px rgba(47, 38, 26, 0.12);
+        border-color: color-mix(in srgb, var(--app-accent) 45%, transparent);
+        background: var(--app-surface);
+        box-shadow: 0 10px 26px rgba(47, 38, 26, 0.12);
+        transform: translateY(-1px);
     }
 }
+
 .icons {
     display: flex;
     align-items: center;
+    gap: 3px;
+    padding-right: 12px;
 }
+
 .icon-audio {
-    width: 2em;
-    height: 2em;
+    width: 27px;
+    height: 27px;
     stroke-width: 0;
     stroke: currentColor;
     fill: currentColor;
-    padding-top: 10px;
-    padding-bottom: 10px;
-
     margin: 0;
 }
+
 .icon-audio--img {
+    width: 27px;
+    height: 27px;
     object-fit: contain;
-    padding-top: 10px;
-    padding-bottom: 10px;
 }
+
 .icon-audio--letter {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.6em;
-    height: 1.6em;
+    width: 27px;
+    height: 27px;
     padding: 0;
-    margin: 0 0.2em;
+    margin: 0;
     border-radius: 50%;
-    background-color: var(--app-accent);
-    color: #2b2114;
-    font-size: 14px;
+    color: var(--app-accent-strong);
+    background: var(--app-accent-soft);
+    font-size: 12px;
     font-weight: bold;
+}
+
+@media (max-width: 480px) {
+    .element {
+        grid-template-columns: 52px minmax(0, 1fr) auto;
+        min-height: 62px;
+        border-radius: 14px;
+
+        &__number {
+            min-width: 38px;
+            min-height: 38px;
+            font-size: 14px;
+        }
+
+        &__title {
+            padding-top: 10px;
+            padding-bottom: 10px;
+            font-size: 15px;
+        }
+    }
+
+    .icons {
+        gap: 1px;
+        padding-right: 8px;
+    }
+
+    .icon-audio,
+    .icon-audio--img,
+    .icon-audio--letter {
+        width: 24px;
+        height: 24px;
+    }
 }
 </style>
