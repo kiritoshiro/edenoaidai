@@ -6,7 +6,6 @@
                 <router-link
                     to="/"
                     class="menu__item"
-                    :class="{ 'is-active': $route.name === 'single' }"
                     active-class=""
                     exact-active-class="is-active"
                 >
