@@ -3151,24 +3151,32 @@ export default {
 
     .notes-viewer {
         &__header {
+            position: relative;
             align-items: stretch;
             flex-direction: column;
-            gap: 7px;
+            gap: 0;
             min-height: 0;
-            padding: 8px;
+            padding: 6px 8px 8px;
+
+            > strong {
+                display: block;
+                height: 34px;
+                padding-right: 100px;
+                font-size: 15px;
+                line-height: 34px;
+            }
         }
 
         &__toolbar {
-            justify-content: flex-end;
-            flex-wrap: wrap;
+            display: block;
+            margin-top: 3px;
         }
 
         &__controls {
             display: grid;
-            flex: 1 0 100%;
-            order: 2;
+            width: 100%;
             min-width: 0;
-            gap: 7px;
+            gap: 4px;
         }
 
         &__formats,
@@ -3177,12 +3185,15 @@ export default {
         }
 
         &__close {
-            order: 1;
+            position: absolute;
+            top: 6px;
+            right: 8px;
         }
 
         &__toolbar button {
-            min-width: 36px;
-            height: 36px;
+            min-width: 34px;
+            height: 34px;
+            padding: 3px 8px;
         }
 
         &__viewport {
