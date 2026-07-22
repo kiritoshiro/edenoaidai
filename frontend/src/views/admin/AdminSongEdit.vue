@@ -41,7 +41,9 @@
                         <p class="adm-file-note">
                             Kiekvienas stulpelis skaidrių režime rodomas atskirai.
                             Priegiesmio stulpeliai pagal nutylėjimą kartojami po
-                            kiekvieno paprasto stulpelio.
+                            kiekvieno paprasto stulpelio. „Priegiesmio dalys“
+                            skaidrėse atskiriamos, o giesmės tekste sujungiamos į
+                            vieną priegiesmį.
                         </p>
                     </div>
                     <button
@@ -57,7 +59,10 @@
                     v-for="(slide, index) in song.slides"
                     :key="slide.key"
                     class="lyrics-slide"
-                    :class="{ 'lyrics-slide--chorus': slide.isChorus }"
+                    :class="{
+                        'lyrics-slide--chorus': slide.type === 'chorus',
+                        'lyrics-slide--chorus-part': slide.type === 'chorusPart',
+                    }"
                 >
                     <div class="lyrics-slide__toolbar">
                         <strong>{{ slideLabel(slide, index) }}</strong>
@@ -92,21 +97,39 @@
                     </div>
 
                     <textarea
+                        :ref="`slideText-${slide.key}`"
                         v-model="slide.text"
                         rows="6"
                         placeholder="Įrašykite šio stulpelio žodžius…"
                     ></textarea>
 
+                    <div class="lyrics-slide__repeat-tools">
+                        <button
+                            type="button"
+                            class="adm-button adm-button--ghost"
+                            @click="wrapSlideRepeat(slide)"
+                        >
+                            /: Pažymėti kartojimą :/
+                        </button>
+                        <small>
+                            Pažymėkite kartojamą tekstą arba padėkite žymeklį ten,
+                            kur norite įterpti ženklus.
+                        </small>
+                    </div>
+
                     <div class="lyrics-slide__options">
-                        <label>
-                            <input
-                                v-model="slide.isChorus"
-                                type="checkbox"
+                        <label class="lyrics-slide__type">
+                            <span>Tipas</span>
+                            <select
+                                v-model="slide.type"
                                 @change="onSlideTypeChange(slide)"
-                            />
-                            Priegiesmis
+                            >
+                                <option value="verse">Posmas</option>
+                                <option value="chorus">Priegiesmis (pradžia)</option>
+                                <option value="chorusPart">Priegiesmio dalis</option>
+                            </select>
                         </label>
-                        <label v-if="!slide.isChorus && hasChorus">
+                        <label v-if="slide.type === 'verse' && hasChorus">
                             <input v-model="slide.chorusAfter" type="checkbox" />
                             Rodyti priegiesmį po šio stulpelio
                         </label>
@@ -294,24 +317,41 @@ function newlinesToBr(value) {
 }
 
 function slidesToBody(slides) {
-    return slides
-        .map(slide => {
-            const lyrics = newlinesToBr(slide.text);
-            return slide.isChorus
+    const blocks = [];
+
+    slides.forEach(slide => {
+        const lyrics = newlinesToBr(slide.text);
+        const previousBlock = blocks[blocks.length - 1];
+        if (slide.isChorus && slide.chorusPart && previousBlock?.isChorus) {
+            previousBlock.html += `<br><br>${lyrics}`;
+            return;
+        }
+
+        blocks.push({
+            isChorus: slide.isChorus,
+            html: slide.isChorus
                 ? `<span class="priegiesmis">Priegiesmis:</span><br>${lyrics}`
-                : lyrics;
-        })
-        .join('<br><br>');
+                : lyrics,
+        });
+    });
+
+    return blocks.map(block => block.html).join('<br><br>');
 }
 
 let nextSlideKey = 1;
 
 function createSlide(values = {}) {
+    const type =
+        values.type === 'chorusPart' || values.chorusPart === true
+            ? 'chorusPart'
+            : values.type === 'chorus' || values.isChorus === true
+              ? 'chorus'
+              : 'verse';
     return {
         key: nextSlideKey++,
         text: brToNewlines(values.text || ''),
-        isChorus: values.isChorus === true,
-        chorusAfter: values.isChorus === true
+        type,
+        chorusAfter: type !== 'verse'
             ? false
             : values.chorusAfter !== false,
     };
@@ -355,7 +395,7 @@ export default {
             return this.$route.name === 'admin-song-new';
         },
         hasChorus() {
-            return this.song?.slides?.some(slide => slide.isChorus) === true;
+            return this.song?.slides?.some(slide => slide.type === 'chorus') === true;
         },
     },
     watch: {
@@ -405,12 +445,41 @@ export default {
             this.song.slides.splice(target, 0, slide);
         },
         onSlideTypeChange(slide) {
-            slide.chorusAfter = slide.isChorus ? false : true;
+            slide.chorusAfter = slide.type === 'verse';
         },
         slideLabel(slide, index) {
-            return slide.isChorus
-                ? `Priegiesmis (${index + 1})`
-                : `Stulpelis ${index + 1}`;
+            if (slide.type === 'chorus') return `Priegiesmis (${index + 1})`;
+            if (slide.type === 'chorusPart') {
+                return `Priegiesmio dalis (${index + 1})`;
+            }
+            return `Stulpelis ${index + 1}`;
+        },
+        wrapSlideRepeat(slide) {
+            const raw = String(slide.text || '');
+            const ref = this.$refs[`slideText-${slide.key}`];
+            const textarea = Array.isArray(ref) ? ref[0] : ref;
+            const start = Number.isInteger(textarea?.selectionStart)
+                ? textarea.selectionStart
+                : raw.length;
+            const end = Number.isInteger(textarea?.selectionEnd)
+                ? textarea.selectionEnd
+                : start;
+            const selected = raw.slice(start, end);
+            const prefix = '/: ';
+            const suffix = ' :/';
+            slide.text = `${raw.slice(0, start)}${prefix}${selected}${suffix}${raw.slice(end)}`;
+
+            this.$nextTick(() => {
+                const nextRef = this.$refs[`slideText-${slide.key}`];
+                const nextTextarea = Array.isArray(nextRef) ? nextRef[0] : nextRef;
+                if (!nextTextarea) return;
+                const selectionStart = start + prefix.length;
+                nextTextarea.focus();
+                nextTextarea.setSelectionRange(
+                    selectionStart,
+                    selectionStart + selected.length,
+                );
+            });
         },
         flash(message) {
             this.message = message;
@@ -453,15 +522,30 @@ export default {
             this.error = '';
             try {
                 const slides = this.song.slides
-                    .map(({ text, isChorus, chorusAfter }) => ({
+                    .map(({ text, type, chorusAfter }) => ({
                         text: lyricsToPlainText(text),
-                        isChorus: isChorus === true,
-                        chorusAfter: isChorus === true ? false : chorusAfter !== false,
+                        isChorus: type === 'chorus' || type === 'chorusPart',
+                        chorusPart: type === 'chorusPart',
+                        chorusAfter:
+                            type === 'verse' ? chorusAfter !== false : false,
                     }))
                     .filter(slide => slide.text !== '');
                 if (slides.length === 0) {
                     throw new Error('Pridėkite bent vieną netuščią teksto stulpelį.');
                 }
+
+                let chorusOpen = false;
+                slides.forEach((slide, index) => {
+                    if (!slide.isChorus) {
+                        chorusOpen = false;
+                    } else if (!slide.chorusPart) {
+                        chorusOpen = true;
+                    } else if (!chorusOpen) {
+                        throw new Error(
+                            `Priegiesmio dalis ${index + 1} turi eiti iškart po priegiesmio pradžios arba kitos jo dalies.`,
+                        );
+                    }
+                });
 
                 const editableSong = { ...this.song };
                 delete editableSong.lists;
@@ -631,6 +715,12 @@ export default {
         background: var(--adm-card-chorus);
     }
 
+    &--chorus-part {
+        border-left-color: var(--adm-card-chorus-part-edge);
+        border-left-style: dashed;
+        background: var(--adm-card-chorus-part);
+    }
+
     textarea {
         width: 100%;
         box-sizing: border-box;
@@ -652,6 +742,23 @@ export default {
         font-size: 18px;
     }
 
+    &__repeat-tools {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin-top: 8px;
+
+        button {
+            padding: 6px 10px;
+        }
+
+        small {
+            max-width: 520px;
+            color: var(--adm-muted);
+        }
+    }
+
     &__options {
         justify-content: flex-start;
         margin-top: 10px;
@@ -664,6 +771,11 @@ export default {
             border-radius: 6px;
             background: var(--adm-option);
             cursor: pointer;
+        }
+
+        select {
+            min-width: 190px;
+            padding: 5px 8px;
         }
     }
 }

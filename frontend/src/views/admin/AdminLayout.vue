@@ -61,8 +61,10 @@ export default {
     --adm-surface: #f5f5f5;
     --adm-card: #fff;
     --adm-card-chorus: #fffaf0;
+    --adm-card-chorus-part: #fffdf6;
     --adm-card-edge: #b5b5b5;
     --adm-card-chorus-edge: #d9b26f;
+    --adm-card-chorus-part-edge: #c8a86c;
     --adm-option: #f2f2f2;
     --adm-hover: #f5f5dc;
     --adm-row-separator: #fff;
@@ -83,8 +85,10 @@ export default {
     --adm-surface: #1c2632;
     --adm-card: #1c2632;
     --adm-card-chorus: #29261f;
+    --adm-card-chorus-part: #24271f;
     --adm-card-edge: #687585;
     --adm-card-chorus-edge: #e0b66c;
+    --adm-card-chorus-part-edge: #b99a63;
     --adm-option: #27313d;
     --adm-hover: #303a47;
     --adm-row-separator: #10161e;
