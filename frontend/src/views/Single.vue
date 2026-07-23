@@ -183,19 +183,51 @@
                             <span class="song-audio__time">{{ formatMediaTime(audioDuration) }}</span>
                         </div>
                     </div>
-                    <label class="song-audio__volume" title="Garsumas">
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            :value="audioVolume"
+                    <div
+                        ref="volumeControl"
+                        class="song-audio__volume"
+                        :class="{ 'is-open': volumeControlOpen }"
+                        @keydown.esc.stop.prevent="volumeControlOpen = false"
+                    >
+                        <button
+                            type="button"
+                            class="song-audio__volume-toggle"
                             :disabled="!audioTypes.length"
-                            aria-label="Garsumas"
-                            @input="setAudioVolume"
-                        />
-                        <span aria-hidden="true">♪</span>
-                    </label>
+                            :aria-expanded="volumeControlOpen"
+                            aria-label="Keisti garsumą"
+                            title="Garsumas"
+                            @click="toggleVolumeControl"
+                        >
+                            <svg
+                                class="song-ui-icon"
+                                aria-hidden="true"
+                                viewBox="0 0 24 24"
+                            >
+                                <path d="M11 5 6.5 9H3v6h3.5L11 19Z" />
+                                <path
+                                    v-if="audioVolume > 0"
+                                    d="M15 9.5a4 4 0 0 1 0 5M17.5 7a7.5 7.5 0 0 1 0 10"
+                                />
+                                <path v-else d="m15 9 6 6m0-6-6 6" />
+                            </svg>
+                        </button>
+                        <div
+                            v-if="volumeControlOpen"
+                            class="song-audio__volume-popover"
+                        >
+                            <input
+                                ref="volumeSlider"
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                :value="audioVolume"
+                                :disabled="!audioTypes.length"
+                                aria-label="Garsumas"
+                                @input="setAudioVolume"
+                            />
+                        </div>
+                    </div>
                     <button
                         type="button"
                         class="song-audio__mute"
@@ -1091,6 +1123,7 @@ export default {
             audioDuration: 0,
             audioVolume: 0.85,
             audioVolumeBeforeMute: 0.85,
+            volumeControlOpen: false,
             trackLabels: {},
             fontSize: initialLyricsFontSize(),
             slideshowOpen: false,
@@ -1494,6 +1527,7 @@ export default {
         document.addEventListener('keydown', this.onSlideshowKeydown);
         document.addEventListener('keydown', this.onSongNavigationKeydown);
         document.addEventListener('keyup', this.onSongNavigationKeyup);
+        document.addEventListener('pointerdown', this.onDocumentPointerDown);
         document.addEventListener('fullscreenchange', this.onFullscreenChange);
         window.addEventListener('blur', this.stopSongNavigationHold);
         window.addEventListener('resize', this.scheduleSlideFit);
@@ -1535,6 +1569,7 @@ export default {
         document.removeEventListener('keydown', this.onSlideshowKeydown);
         document.removeEventListener('keydown', this.onSongNavigationKeydown);
         document.removeEventListener('keyup', this.onSongNavigationKeyup);
+        document.removeEventListener('pointerdown', this.onDocumentPointerDown);
         document.removeEventListener('fullscreenchange', this.onFullscreenChange);
         window.removeEventListener('blur', this.stopSongNavigationHold);
         window.removeEventListener('resize', this.scheduleSlideFit);
@@ -2566,6 +2601,20 @@ body.light .zone{color:rgba(46,32,13,.72)}
                 console.warn('Nepavyko atnaujinti įrašų pavadinimų:', error);
             }
         },
+        toggleVolumeControl() {
+            this.volumeControlOpen = !this.volumeControlOpen;
+            if (this.volumeControlOpen) {
+                this.$nextTick(() => this.$refs.volumeSlider?.focus());
+            }
+        },
+        onDocumentPointerDown(event) {
+            if (
+                this.volumeControlOpen &&
+                !this.$refs.volumeControl?.contains(event.target)
+            ) {
+                this.volumeControlOpen = false;
+            }
+        },
         async toggleAudio() {
             const audio = this.$refs.audioElement;
             if (!audio || !this.selectedAudioType) return;
@@ -2626,6 +2675,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         resetAudioState() {
             const audio = this.$refs.audioElement;
             if (audio && !audio.paused) audio.pause();
+            this.volumeControlOpen = false;
             this.audioPlaying = false;
             this.audioCurrentTime = 0;
             this.audioDuration = 0;
@@ -2953,32 +3003,68 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     &__volume {
-        width: 38px;
-        height: 72px;
-        flex: 0 0 38px;
+        position: relative;
+        display: block;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
         align-self: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: 1px;
-        padding: 5px 4px 4px;
-        box-sizing: border-box;
-        border: 1px solid var(--app-border);
-        border-radius: 11px;
-        color: var(--app-muted);
-        background: var(--app-surface-soft);
+        transform: translateY(-3px);
 
         input {
             width: 18px;
-            height: 52px;
+            height: 62px;
             margin: 0;
             direction: rtl;
             writing-mode: vertical-lr;
         }
+    }
 
-        span {
-            font-size: 12px;
-            line-height: 1;
+    &__volume-toggle {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid var(--app-border);
+        border-radius: 11px;
+        color: var(--app-muted);
+        background: var(--app-surface-soft);
+        cursor: pointer;
+
+        &:hover:not(:disabled),
+        &[aria-expanded='true'] {
+            color: var(--app-text);
+            background: var(--app-hover);
         }
+
+        &:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .song-ui-icon {
+            width: 20px;
+            height: 20px;
+        }
+    }
+
+    &__volume-popover {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        z-index: 12;
+        display: grid;
+        width: 42px;
+        height: 82px;
+        padding: 8px 0;
+        place-items: center;
+        box-sizing: border-box;
+        border: 1px solid var(--app-border);
+        border-radius: 12px;
+        background: var(--app-surface);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+        transform: translateX(-50%);
     }
 
     &__mute {
@@ -3527,8 +3613,8 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
 .song-stanza {
     display: grid;
-    grid-template-columns: 2.4em minmax(0, 1fr);
-    column-gap: 0.7em;
+    grid-template-columns: clamp(38px, 1.35em, 72px) minmax(0, 1fr);
+    column-gap: clamp(10px, 0.4em, 20px);
     margin: 0 0 1.7em;
 
     &:last-child {
