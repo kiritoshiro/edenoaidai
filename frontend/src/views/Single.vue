@@ -184,7 +184,6 @@
                         </div>
                     </div>
                     <label class="song-audio__volume" title="Garsumas">
-                        <span aria-hidden="true">♪</span>
                         <input
                             type="range"
                             min="0"
@@ -195,6 +194,7 @@
                             aria-label="Garsumas"
                             @input="setAudioVolume"
                         />
+                        <span aria-hidden="true">♪</span>
                     </label>
                     <button
                         type="button"
@@ -1134,6 +1134,10 @@ export default {
             slideshowOverflowIndexes: [],
             slideValidationFrame: 0,
             headingFitFrame: 0,
+            songNavigationDirection: 0,
+            songNavigationIndex: -1,
+            songNavigationRepeatCount: 0,
+            songNavigationTimer: 0,
             presenterConnected: false,
             presenterOpening: false,
             phoneViewport: window.matchMedia('(max-width: 720px)').matches,
@@ -1488,7 +1492,10 @@ export default {
     },
     mounted() {
         document.addEventListener('keydown', this.onSlideshowKeydown);
+        document.addEventListener('keydown', this.onSongNavigationKeydown);
+        document.addEventListener('keyup', this.onSongNavigationKeyup);
         document.addEventListener('fullscreenchange', this.onFullscreenChange);
+        window.addEventListener('blur', this.stopSongNavigationHold);
         window.addEventListener('resize', this.scheduleSlideFit);
         window.addEventListener('resize', this.scheduleHeadingFit);
         window.addEventListener('resize', this.updatePhoneViewport);
@@ -1526,7 +1533,10 @@ export default {
     },
     beforeUnmount() {
         document.removeEventListener('keydown', this.onSlideshowKeydown);
+        document.removeEventListener('keydown', this.onSongNavigationKeydown);
+        document.removeEventListener('keyup', this.onSongNavigationKeyup);
         document.removeEventListener('fullscreenchange', this.onFullscreenChange);
+        window.removeEventListener('blur', this.stopSongNavigationHold);
         window.removeEventListener('resize', this.scheduleSlideFit);
         window.removeEventListener('resize', this.scheduleHeadingFit);
         window.removeEventListener('resize', this.updatePhoneViewport);
@@ -1536,6 +1546,7 @@ export default {
         if (this.slideValidationFrame) {
             window.cancelAnimationFrame(this.slideValidationFrame);
         }
+        this.stopSongNavigationHold();
         this.stopSlideshowSettingsDrag();
         this.closePresenterWindow();
         this.closeSlideshow();
@@ -1765,6 +1776,100 @@ export default {
                     : previews;
                 active?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             });
+        },
+        onSongNavigationKeydown(event) {
+            const direction =
+                event.key === 'ArrowLeft'
+                    ? -1
+                    : event.key === 'ArrowRight'
+                      ? 1
+                      : 0;
+            if (!direction) return;
+            if (
+                event.defaultPrevented ||
+                event.ctrlKey ||
+                event.metaKey ||
+                event.altKey ||
+                this.notesFullscreenOpen ||
+                this.slideshowOpen ||
+                this.presenterConnected ||
+                this.songGalleryOpen ||
+                this.slideshowSettingsOpen ||
+                event.target.closest?.(
+                    'input, select, textarea, [contenteditable="true"]',
+                )
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            if (event.repeat) return;
+            this.startSongNavigationHold(direction);
+        },
+        onSongNavigationKeyup(event) {
+            const direction =
+                event.key === 'ArrowLeft'
+                    ? -1
+                    : event.key === 'ArrowRight'
+                      ? 1
+                      : 0;
+            if (
+                direction &&
+                direction === this.songNavigationDirection
+            ) {
+                this.stopSongNavigationHold();
+            }
+        },
+        startSongNavigationHold(direction) {
+            this.stopSongNavigationHold();
+            this.songNavigationDirection = direction;
+            this.songNavigationIndex = this.songIds.indexOf(this.songId);
+            this.songNavigationRepeatCount = 0;
+            if (!this.stepSongNavigation(direction)) {
+                this.stopSongNavigationHold();
+                return;
+            }
+            this.scheduleSongNavigationRepeat(440);
+        },
+        scheduleSongNavigationRepeat(delay) {
+            this.songNavigationTimer = window.setTimeout(() => {
+                this.songNavigationTimer = 0;
+                if (
+                    !this.songNavigationDirection ||
+                    !this.stepSongNavigation(this.songNavigationDirection)
+                ) {
+                    this.stopSongNavigationHold();
+                    return;
+                }
+                this.songNavigationRepeatCount += 1;
+                const nextDelay = Math.max(
+                    70,
+                    220 - this.songNavigationRepeatCount * 18,
+                );
+                this.scheduleSongNavigationRepeat(nextDelay);
+            }, delay);
+        },
+        stepSongNavigation(direction) {
+            if (!this.songIds.length) return false;
+            const currentIndex =
+                this.songNavigationIndex >= 0
+                    ? this.songNavigationIndex
+                    : this.songIds.indexOf(this.songId);
+            const nextIndex = currentIndex + direction;
+            if (nextIndex < 0 || nextIndex >= this.songIds.length) return false;
+
+            this.songNavigationIndex = nextIndex;
+            this.goTo(this.songIds[nextIndex]);
+            return true;
+        },
+        stopSongNavigationHold() {
+            if (this.songNavigationTimer) {
+                window.clearTimeout(this.songNavigationTimer);
+            }
+            this.songNavigationTimer = 0;
+            this.songNavigationDirection = 0;
+            this.songNavigationIndex = -1;
+            this.songNavigationRepeatCount = 0;
         },
         onSlideshowKeydown(event) {
             if (this.notesFullscreenOpen) {
@@ -2550,11 +2655,13 @@ body.light .zone{color:rgba(46,32,13,.72)}
                 .catch(error => console.error(error));
         },
         fetchSong() {
+            const requestedSongId = this.songId;
             this.$songs
                 .where('songId')
-                .equals(this.songId)
+                .equals(requestedSongId)
                 .first()
                 .then(song => {
+                    if (requestedSongId !== this.songId) return;
                     this.song = song || null;
                     this.slideshowIndex = 0;
                     this.slideshowOptions = [];
@@ -2768,7 +2875,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__controls {
         min-width: 0;
-        align-items: stretch;
+        align-items: center;
         gap: 11px;
     }
 
@@ -2846,12 +2953,31 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     &__volume {
+        width: 38px;
+        height: 72px;
+        flex: 0 0 38px;
         align-self: center;
-        gap: 5px;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1px;
+        padding: 5px 4px 4px;
+        box-sizing: border-box;
+        border: 1px solid var(--app-border);
+        border-radius: 11px;
         color: var(--app-muted);
+        background: var(--app-surface-soft);
 
         input {
-            width: 62px;
+            width: 18px;
+            height: 52px;
+            margin: 0;
+            direction: rtl;
+            writing-mode: vertical-lr;
+        }
+
+        span {
+            font-size: 12px;
+            line-height: 1;
         }
     }
 
@@ -3262,7 +3388,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     h1 {
         display: grid;
-        height: clamp(68px, 8vw, 84px);
+        height: clamp(60px, 6vw, 68px);
         place-items: center;
         overflow: hidden;
         margin: 0;
@@ -3275,12 +3401,12 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__verse {
         display: flex;
-        height: 44px;
+        height: 32px;
         align-items: center;
         justify-content: center;
         max-width: 610px;
         overflow: hidden;
-        margin: 8px auto 0;
+        margin: 0 auto;
         color: var(--app-muted);
         font-family: Georgia, 'Times New Roman', serif;
         font-size: 16px;
@@ -3390,9 +3516,10 @@ body.light .zone{color:rgba(46,32,13,.72)}
 .song .song__body {
     display: block;
     width: fit-content;
-    max-width: min(100%, 592px);
+    max-width: 100%;
     margin: 0 auto;
     padding: clamp(28px, 6vw, 56px) 24px clamp(38px, 8vw, 72px);
+    box-sizing: border-box;
     font-family: Georgia, 'Times New Roman', serif;
     line-height: 1.7;
     text-align: left;
