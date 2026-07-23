@@ -2795,7 +2795,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 .song-audio {
     display: grid;
     align-content: center;
-    gap: 14px;
+    gap: 16px;
     width: 100%;
     min-width: 0;
     height: 100%;
@@ -2819,21 +2819,23 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__header {
         min-width: 0;
-        flex-wrap: wrap;
+        align-items: flex-end;
+        flex-wrap: nowrap;
         justify-content: flex-start;
-        gap: 10px 24px;
+        gap: 12px 18px;
     }
 
     &__selector {
         display: grid;
         min-width: 170px;
-        flex: 0 1 220px;
-        gap: 3px;
+        flex: 0 1 240px;
+        gap: 7px;
 
         > span {
             color: var(--app-muted);
             font-size: 12px;
             font-weight: 700;
+            line-height: 1.2;
             letter-spacing: 0.03em;
             text-transform: uppercase;
         }
@@ -2841,8 +2843,8 @@ body.light .zone{color:rgba(46,32,13,.72)}
         select {
             min-width: 0;
             width: 100%;
-            height: 38px;
-            padding: 0 30px 0 10px;
+            height: 48px;
+            padding: 0 34px 0 12px;
             border: 1px solid var(--app-border);
             border-radius: 10px;
             color: var(--app-text);
@@ -2869,17 +2871,21 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__types {
         min-width: 0;
-        flex-wrap: wrap;
-        gap: 6px;
+        flex: 1 1 0;
+        align-self: flex-end;
+        flex-wrap: nowrap;
+        gap: 8px;
     }
 
     &__type {
-        width: 38px;
+        width: 48px;
         min-width: 38px;
-        min-height: 38px;
+        height: 48px;
+        flex: 0 1 48px;
         justify-content: center;
         gap: 0;
         padding: 5px;
+        box-sizing: border-box;
         border: 1px solid var(--app-border);
         border-radius: 11px;
         color: var(--app-text);
@@ -2899,22 +2905,26 @@ body.light .zone{color:rgba(46,32,13,.72)}
         }
 
         &--single {
+            min-width: 48px;
+            flex: 0 0 48px;
+            align-self: flex-end;
             cursor: default;
         }
     }
 
     &__type-icon {
         display: grid;
-        width: 24px;
-        height: 24px;
-        flex: 0 0 24px;
+        width: min(30px, 100%);
+        height: auto;
+        flex: 0 1 30px;
+        aspect-ratio: 1;
         place-items: center;
 
         .icon-audio,
         img,
         svg {
-            width: 24px;
-            height: 24px;
+            width: 100%;
+            height: 100%;
             margin: 0;
         }
     }
@@ -3051,7 +3061,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__volume-popover {
         position: absolute;
-        bottom: calc(100% + 8px);
+        bottom: -2px;
         left: 50%;
         z-index: 12;
         display: grid;
@@ -4072,6 +4082,8 @@ body.light .zone{color:rgba(46,32,13,.72)}
         &__type {
             width: 34px;
             min-width: 34px;
+            height: 34px;
+            flex-basis: 34px;
             min-height: 34px;
             justify-content: center;
             gap: 0;
