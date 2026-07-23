@@ -3758,18 +3758,18 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
         h1 {
             height: auto;
-            min-height: 38px;
+            min-height: 34px;
             padding: 2px 0;
             overflow: visible;
-            font-size: clamp(21px, 6.4vw, 25px);
-            line-height: 1.08;
+            font-size: clamp(18px, 5.6vw, 22px);
+            line-height: 1.1;
         }
 
         &__verse {
             height: auto;
-            min-height: 28px;
+            min-height: 26px;
             margin-top: 2px;
-            font-size: 13.5px;
+            font-size: 12.5px;
             line-height: 1.35;
         }
     }
