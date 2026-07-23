@@ -112,12 +112,15 @@
                             :class="{ 'is-selected': selectedAudioType === type }"
                             :aria-pressed="selectedAudioType === type"
                             :aria-label="`Pasirinkti: ${audioTypeLabel(type)}`"
+                            :title="audioTypeLabel(type)"
                             @click="selectedAudioType = type"
                         >
                             <span class="song-audio__type-icon" aria-hidden="true">
                                 <song-icon :name="type" />
                             </span>
-                            <span>{{ audioTypeLabel(type) }}</span>
+                            <span class="song-audio__type-label">
+                                {{ audioTypeLabel(type) }}
+                            </span>
                         </button>
                     </div>
                     <div
@@ -199,6 +202,8 @@
             >
                 <button
                     class="song__slideshow-button song-switcher__slideshow"
+                    aria-label="Rodyti skaidres"
+                    title="Skaidrės"
                     @click="openSlideshow"
                 >
                     <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -2654,7 +2659,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         cursor: pointer;
         transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 
-        > span:last-child {
+        > .song-audio__type-label {
             max-width: 150px;
             overflow: hidden;
             font-size: 13px;
@@ -3594,10 +3599,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
             gap: 7px;
         }
 
-        &__volume {
-            display: none;
-        }
-
         &__play {
             min-width: 104px;
             width: auto;
@@ -3669,13 +3670,13 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     .song-heading {
-        margin-bottom: 12px;
+        margin-bottom: 8px;
         padding: 0 8px;
 
         &__number-row {
             grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr);
             gap: 4px;
-            margin-bottom: 8px;
+            margin-bottom: 2px;
         }
 
         &__navigation {
@@ -3688,32 +3689,172 @@ body.light .zone{color:rgba(46,32,13,.72)}
         }
 
         h1 {
-            height: 64px;
-            font-size: 29px;
+            height: auto;
+            min-height: 44px;
+            padding: 2px 0;
+            overflow: visible;
+            font-size: clamp(24px, 7.2vw, 28px);
+            line-height: 1.08;
         }
 
         &__verse {
-            height: 48px;
-            font-size: 15px;
+            height: auto;
+            min-height: 28px;
+            margin-top: 2px;
+            font-size: 13.5px;
+            line-height: 1.35;
         }
     }
 
+    .song-action-row:not(.song-action-row--audio-only) {
+        grid-template-columns: minmax(0, 1fr) 48px;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .song-action-row--audio-only {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .song-switcher {
-        width: 100%;
+        width: auto;
+        height: 100%;
 
         &__slideshow {
             width: 100%;
-            min-height: 56px;
+            min-height: 100%;
             justify-content: center;
-            font-size: 14px;
-        }
+            gap: 0;
+            padding: 0;
+            border-radius: 16px;
+            font-size: 0;
 
+            > span {
+                display: none;
+            }
+
+            .song-ui-icon {
+                width: 22px;
+                height: 22px;
+            }
+        }
     }
 
     .song-audio.song-panel {
         grid-template-columns: 1fr;
-        gap: 14px;
-        padding: 15px;
+        gap: 8px;
+        padding: 10px;
+        border-radius: 16px;
+    }
+
+    .song-audio {
+        &__header {
+            display: grid;
+            grid-template-areas:
+                'types'
+                'version';
+            grid-template-columns: minmax(0, 1fr);
+            justify-content: stretch;
+            gap: 5px;
+        }
+
+        &__types {
+            grid-area: types;
+            justify-content: flex-start;
+            gap: 5px;
+        }
+
+        &__version {
+            grid-area: version;
+            min-width: 0;
+            align-items: flex-start;
+            gap: 0;
+
+            > span {
+                display: none;
+            }
+
+            strong {
+                font-size: 12.5px;
+                line-height: 1.2;
+            }
+        }
+
+        &__type {
+            width: 34px;
+            min-width: 34px;
+            min-height: 34px;
+            justify-content: center;
+            gap: 0;
+            padding: 4px;
+            border-radius: 10px;
+
+            > .song-audio__type-label {
+                display: none;
+            }
+
+            &--single {
+                grid-area: types;
+                justify-self: start;
+            }
+        }
+
+        &__type-icon {
+            width: 22px;
+            height: 22px;
+            flex-basis: 22px;
+
+            .icon-audio,
+            img,
+            svg {
+                width: 22px;
+                height: 22px;
+            }
+        }
+
+        &__controls {
+            display: grid;
+            grid-template-columns: auto minmax(64px, 1fr) 28px;
+            align-items: center;
+            gap: 6px;
+        }
+
+        &__play {
+            min-width: 90px;
+            height: 42px;
+            padding: 0 10px;
+            gap: 6px;
+        }
+
+        &__timeline {
+            width: 100%;
+        }
+
+        &__volume {
+            position: relative;
+            display: flex;
+            width: 28px;
+            min-width: 28px;
+            height: 58px;
+            align-self: center;
+            justify-content: center;
+            gap: 0;
+
+            > span {
+                display: none;
+            }
+
+            input {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 54px;
+                height: 18px;
+                margin: 0;
+                transform: translate(-50%, -50%) rotate(-90deg);
+                transform-origin: center;
+            }
+        }
     }
 
     .song-lyrics {
