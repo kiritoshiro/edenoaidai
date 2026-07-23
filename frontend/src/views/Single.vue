@@ -1927,17 +1927,26 @@ export default {
         },
         fitHeadingText() {
             const compact = window.matchMedia('(max-width: 680px)').matches;
+            if (compact) {
+                [this.$refs.songTitle, this.$refs.songVerse].forEach(element => {
+                    if (!element) return;
+                    element.style.removeProperty('font-size');
+                    element.style.removeProperty('white-space');
+                });
+                return;
+            }
+
             this.fitHeadingElement(
                 this.$refs.songTitle,
-                compact ? 18 : 25,
-                compact ? 34 : 40,
-                compact ? 26 : 32,
+                25,
+                40,
+                32,
             );
             this.fitHeadingElement(
                 this.$refs.songVerse,
-                compact ? 12 : 13,
+                13,
                 16,
-                compact ? 14 : 15,
+                15,
             );
         },
         fitCurrentSlide() {
