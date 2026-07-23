@@ -3079,7 +3079,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         color: var(--app-muted);
         background: transparent;
         cursor: pointer;
-        transform: translateY(10px);
+        transform: translateY(5px);
         transition: color 0.16s ease, background-color 0.16s ease;
 
         strong {
