@@ -76,22 +76,28 @@
         </section>
 
         <div
-            v-if="audioTypes.length || sourceSlides.length"
             class="song-action-row"
             :class="{
-                'song-action-row--audio-only': audioTypes.length && !sourceSlides.length,
-                'song-action-row--slides-only': !audioTypes.length && sourceSlides.length,
+                'song-action-row--audio-only': !sourceSlides.length,
             }"
         >
             <section
-                v-if="audioTypes.length"
                 class="song-audio song-panel"
+                :class="{ 'song-audio--empty': !audioTypes.length }"
                 aria-labelledby="song-audio-title"
             >
                 <div class="song-audio__header">
                     <div class="song-audio__version">
                         <span id="song-audio-title">Giesmės garso įrašas</span>
-                        <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
+                        <strong>
+                            {{
+                                audioTypes.length
+                                    ? audioTypeLabel(
+                                          selectedAudioType || audioTypes[0],
+                                      )
+                                    : 'Garso įrašų nėra'
+                            }}
+                        </strong>
                     </div>
                     <div
                         v-if="audioTypes.length > 1"
@@ -114,9 +120,21 @@
                             <span>{{ audioTypeLabel(type) }}</span>
                         </button>
                     </div>
+                    <div
+                        v-else-if="audioTypes.length === 1"
+                        class="song-audio__type song-audio__type--single is-selected"
+                        role="img"
+                        :aria-label="audioTypeLabel(audioTypes[0])"
+                        :title="audioTypeLabel(audioTypes[0])"
+                    >
+                        <span class="song-audio__type-icon" aria-hidden="true">
+                            <song-icon :name="audioTypes[0]" />
+                        </span>
+                    </div>
                 </div>
 
                 <audio
+                    v-if="audioTypes.length"
                     ref="audioElement"
                     :key="`${selectedAudioType}-${song.songId}`"
                     class="song-audio__element"
@@ -134,6 +152,7 @@
                     <button
                         type="button"
                         class="song-audio__play"
+                        :disabled="!audioTypes.length"
                         :aria-label="audioPlaying ? 'Pristabdyti įrašą' : 'Paleisti įrašą'"
                         @click="toggleAudio"
                     >
@@ -165,6 +184,7 @@
                             max="1"
                             step="0.05"
                             :value="audioVolume"
+                            :disabled="!audioTypes.length"
                             aria-label="Garsumas"
                             @input="setAudioVolume"
                         />
@@ -2398,7 +2418,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         },
         async toggleAudio() {
             const audio = this.$refs.audioElement;
-            if (!audio) return;
+            if (!audio || !this.selectedAudioType) return;
             if (audio.paused) {
                 try {
                     await audio.play();
@@ -2556,11 +2576,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
     &--audio-only {
         grid-template-columns: minmax(0, 1fr);
     }
-
-    &--slides-only {
-        grid-template-columns: minmax(150px, 180px);
-        justify-content: end;
-    }
 }
 
 .song-audio {
@@ -2658,6 +2673,14 @@ body.light .zone{color:rgba(46,32,13,.72)}
             color: #2b2114;
             background: var(--app-accent);
         }
+
+        &--single {
+            width: 38px;
+            min-width: 38px;
+            justify-content: center;
+            padding: 5px;
+            cursor: default;
+        }
     }
 
     &__type-icon {
@@ -2712,12 +2735,27 @@ body.light .zone{color:rgba(46,32,13,.72)}
             transform: translateY(-1px) scale(1.03);
             box-shadow: 0 7px 18px rgba(82, 58, 19, 0.3);
         }
+
+        &:disabled {
+            opacity: 0.58;
+            cursor: not-allowed;
+            box-shadow: none;
+
+            &:hover {
+                transform: none;
+                box-shadow: none;
+            }
+        }
     }
 
     &__progress,
     &__volume input {
         accent-color: var(--app-accent);
         cursor: pointer;
+
+        &:disabled {
+            cursor: not-allowed;
+        }
     }
 
     &__progress {
@@ -2751,6 +2789,17 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
         input {
             width: 62px;
+        }
+    }
+
+    &--empty {
+        .song-audio__version strong {
+            color: var(--app-muted);
+            font-weight: 600;
+        }
+
+        .song-audio__controls {
+            opacity: 0.68;
         }
     }
 }
@@ -3518,8 +3567,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
 @media (max-width: 720px) {
     .song-action-row,
-    .song-action-row--audio-only,
-    .song-action-row--slides-only {
+    .song-action-row--audio-only {
         grid-template-columns: minmax(0, 1fr);
         justify-content: stretch;
         gap: 10px;
