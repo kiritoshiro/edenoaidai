@@ -75,12 +75,108 @@
             </p>
         </section>
 
-        <section
-            v-if="sourceSlides.length"
-            class="song-switcher"
-            aria-label="Skaidrių veiksmai"
+        <div
+            v-if="audioTypes.length || sourceSlides.length"
+            class="song-action-row"
+            :class="{
+                'song-action-row--audio-only': audioTypes.length && !sourceSlides.length,
+                'song-action-row--slides-only': !audioTypes.length && sourceSlides.length,
+            }"
         >
-            <div class="song-switcher__actions">
+            <section
+                v-if="audioTypes.length"
+                class="song-audio song-panel"
+                aria-labelledby="song-audio-title"
+            >
+                <div class="song-audio__header">
+                    <div class="song-audio__version">
+                        <span id="song-audio-title">Giesmės garso įrašas</span>
+                        <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
+                    </div>
+                    <div
+                        v-if="audioTypes.length > 1"
+                        class="song-audio__types"
+                        aria-label="Garso įrašo versija"
+                    >
+                        <button
+                            v-for="type in audioTypes"
+                            :key="type"
+                            type="button"
+                            class="song-audio__type"
+                            :class="{ 'is-selected': selectedAudioType === type }"
+                            :aria-pressed="selectedAudioType === type"
+                            :aria-label="`Pasirinkti: ${audioTypeLabel(type)}`"
+                            @click="selectedAudioType = type"
+                        >
+                            <span class="song-audio__type-icon" aria-hidden="true">
+                                <song-icon :name="type" />
+                            </span>
+                            <span>{{ audioTypeLabel(type) }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <audio
+                    ref="audioElement"
+                    :key="`${selectedAudioType}-${song.songId}`"
+                    class="song-audio__element"
+                    :src="selectedAudioUrl"
+                    preload="metadata"
+                    @loadedmetadata="syncAudioMetadata"
+                    @durationchange="syncAudioMetadata"
+                    @timeupdate="syncAudioTime"
+                    @play="audioPlaying = true"
+                    @pause="audioPlaying = false"
+                    @ended="audioPlaying = false"
+                ></audio>
+
+                <div class="song-audio__controls">
+                    <button
+                        type="button"
+                        class="song-audio__play"
+                        :aria-label="audioPlaying ? 'Pristabdyti įrašą' : 'Paleisti įrašą'"
+                        @click="toggleAudio"
+                    >
+                        <span aria-hidden="true">{{ audioPlaying ? '❚❚' : '▶' }}</span>
+                        <span>{{ audioPlaying ? 'Pristabdyti' : 'Klausyti' }}</span>
+                    </button>
+                    <div class="song-audio__timeline">
+                        <input
+                            class="song-audio__progress"
+                            type="range"
+                            min="0"
+                            :max="audioDuration || 0"
+                            step="0.1"
+                            :value="audioCurrentTime"
+                            :disabled="!audioDuration"
+                            aria-label="Įrašo pozicija"
+                            @input="seekAudio"
+                        />
+                        <div class="song-audio__times" aria-hidden="true">
+                            <span class="song-audio__time">{{ formatMediaTime(audioCurrentTime) }}</span>
+                            <span class="song-audio__time">{{ formatMediaTime(audioDuration) }}</span>
+                        </div>
+                    </div>
+                    <label class="song-audio__volume" title="Garsumas">
+                        <span aria-hidden="true">♪</span>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            :value="audioVolume"
+                            aria-label="Garsumas"
+                            @input="setAudioVolume"
+                        />
+                    </label>
+                </div>
+            </section>
+
+            <section
+                v-if="sourceSlides.length"
+                class="song-switcher"
+                aria-label="Skaidrių veiksmai"
+            >
                 <button
                     class="song__slideshow-button song-switcher__slideshow"
                     @click="openSlideshow"
@@ -89,99 +185,10 @@
                         <rect x="3" y="4" width="18" height="13" rx="2" />
                         <path d="M8 21h8M12 17v4M7 8h10M7 12h7" />
                     </svg>
-                    Skaidrės
+                    <span>Skaidrės</span>
                 </button>
-            </div>
-        </section>
-
-        <section v-if="audioTypes.length" class="song-audio song-panel" aria-labelledby="song-audio-title">
-            <div class="song-audio__header">
-                <button
-                    v-if="audioTypes.length > 1"
-                    type="button"
-                    class="song-audio__icon song-audio__icon--button"
-                    aria-label="Pasirinkti garso įrašo versiją"
-                    title="Pasirinkti įrašo versiją"
-                    @click="openAudioTypePicker"
-                >
-                    <song-icon :name="selectedAudioType" />
-                </button>
-                <div v-else class="song-audio__icon" aria-hidden="true">
-                    <song-icon :name="selectedAudioType" />
-                </div>
-                <label v-if="audioTypes.length > 1" class="song-audio__version">
-                    <span id="song-audio-title">Giesmės garso įrašas</span>
-                    <select
-                        ref="audioTypeSelect"
-                        v-model="selectedAudioType"
-                        aria-label="Įrašo versija"
-                    >
-                        <option v-for="type in audioTypes" :key="type" :value="type">
-                            {{ audioTypeLabel(type) }}
-                        </option>
-                    </select>
-                </label>
-                <div v-else class="song-audio__version song-audio__version--single">
-                    <span id="song-audio-title">Giesmės garso įrašas</span>
-                    <strong>{{ audioTypeLabel(selectedAudioType) }}</strong>
-                </div>
-            </div>
-
-            <audio
-                ref="audioElement"
-                :key="`${selectedAudioType}-${song.songId}`"
-                class="song-audio__element"
-                :src="selectedAudioUrl"
-                preload="metadata"
-                @loadedmetadata="syncAudioMetadata"
-                @durationchange="syncAudioMetadata"
-                @timeupdate="syncAudioTime"
-                @play="audioPlaying = true"
-                @pause="audioPlaying = false"
-                @ended="audioPlaying = false"
-            ></audio>
-
-            <div class="song-audio__controls">
-                <button
-                    type="button"
-                    class="song-audio__play"
-                    :aria-label="audioPlaying ? 'Pristabdyti įrašą' : 'Paleisti įrašą'"
-                    @click="toggleAudio"
-                >
-                    <span aria-hidden="true">{{ audioPlaying ? '❚❚' : '▶' }}</span>
-                    <span>{{ audioPlaying ? 'Pristabdyti' : 'Klausyti' }}</span>
-                </button>
-                <div class="song-audio__timeline">
-                    <input
-                        class="song-audio__progress"
-                        type="range"
-                        min="0"
-                        :max="audioDuration || 0"
-                        step="0.1"
-                        :value="audioCurrentTime"
-                        :disabled="!audioDuration"
-                        aria-label="Įrašo pozicija"
-                        @input="seekAudio"
-                    />
-                    <div class="song-audio__times" aria-hidden="true">
-                        <span class="song-audio__time">{{ formatMediaTime(audioCurrentTime) }}</span>
-                        <span class="song-audio__time">{{ formatMediaTime(audioDuration) }}</span>
-                    </div>
-                </div>
-                <label class="song-audio__volume" title="Garsumas">
-                    <span aria-hidden="true">♪</span>
-                    <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        :value="audioVolume"
-                        aria-label="Garsumas"
-                        @input="setAudioVolume"
-                    />
-                </label>
-            </div>
-        </section>
+            </section>
+        </div>
 
         <article class="song-lyrics song-panel" aria-labelledby="song-lyrics-title">
             <header class="song-lyrics__header">
@@ -2370,22 +2377,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
                 ? cleaned.charAt(0).toLocaleUpperCase('lt') + cleaned.slice(1)
                 : 'Įrašas';
         },
-        openAudioTypePicker() {
-            if (this.audioTypes.length < 2) return;
-            const select = this.$refs.audioTypeSelect;
-            if (!select) return;
-
-            try {
-                if (typeof select.showPicker === 'function') {
-                    select.showPicker();
-                } else {
-                    select.focus();
-                    select.click();
-                }
-            } catch {
-                select.focus();
-            }
-        },
         async fetchTrackLabels() {
             try {
                 const separator = config.tracksUrl.includes('?') ? '&' : '?';
@@ -2553,14 +2544,35 @@ body.light .zone{color:rgba(46,32,13,.72)}
     color: var(--app-text);
 }
 
+.song-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 180px);
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
+    margin: 0 0 16px;
+    box-sizing: border-box;
+
+    &--audio-only {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    &--slides-only {
+        grid-template-columns: minmax(150px, 180px);
+        justify-content: end;
+    }
+}
+
 .song-audio {
     display: grid;
-    grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.5fr);
-    align-items: center;
-    gap: 18px;
-    width: min(760px, calc(100% - 28px));
-    margin: 16px auto 26px;
-    padding: 15px 18px;
+    align-content: center;
+    gap: 14px;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
+    padding: 16px 18px;
+    box-sizing: border-box;
     border: 1px solid var(--app-border);
     border-radius: 18px;
     background: var(--app-surface);
@@ -2570,6 +2582,8 @@ body.light .zone{color:rgba(46,32,13,.72)}
     &__controls,
     &__times,
     &__version,
+    &__types,
+    &__type,
     &__volume {
         display: flex;
         align-items: center;
@@ -2577,41 +2591,14 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__header {
         min-width: 0;
-        gap: 12px;
-    }
-
-    &__icon {
-        display: grid;
-        flex: 0 0 46px;
-        width: 46px;
-        height: 46px;
-        place-items: center;
-        border-radius: 14px;
-        color: var(--app-text);
-        background: var(--app-accent-soft);
-
-        svg,
-        img {
-            width: 28px;
-            height: 28px;
-        }
-
-        &--button {
-            padding: 0;
-            border: 0;
-            cursor: pointer;
-            transition: background-color 0.16s ease, transform 0.16s ease;
-
-            &:hover {
-                background: var(--app-hover);
-                transform: translateY(-1px);
-            }
-        }
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 10px 24px;
     }
 
     &__version {
-        min-width: 0;
-        flex: 1;
+        min-width: 150px;
+        flex: 0 1 190px;
         align-items: stretch;
         flex-direction: column;
         gap: 3px;
@@ -2624,33 +2611,68 @@ body.light .zone{color:rgba(46,32,13,.72)}
             text-transform: uppercase;
         }
 
-        select,
         strong {
             min-width: 0;
             width: 100%;
             color: var(--app-text);
             font-size: 15px;
-        }
-
-        select {
-            min-height: 36px;
-            padding: 5px 30px 5px 9px;
-            border: 1px solid var(--app-border);
-            border-radius: 9px;
-            outline: none;
-            background: var(--app-surface-soft);
-            cursor: pointer;
-
-            &:focus {
-                border-color: var(--app-accent);
-                box-shadow: 0 0 0 3px var(--app-accent-soft);
-            }
-        }
-
-        strong {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+    }
+
+    &__types {
+        min-width: 0;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    &__type {
+        min-height: 38px;
+        gap: 7px;
+        padding: 5px 10px;
+        border: 1px solid var(--app-border);
+        border-radius: 11px;
+        color: var(--app-text);
+        background: var(--app-surface-soft);
+        cursor: pointer;
+        transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+
+        > span:last-child {
+            max-width: 150px;
+            overflow: hidden;
+            font-size: 13px;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        &:hover {
+            border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
+            background: var(--app-hover);
+        }
+
+        &.is-selected {
+            border-color: var(--app-accent);
+            color: #2b2114;
+            background: var(--app-accent);
+        }
+    }
+
+    &__type-icon {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        flex: 0 0 24px;
+        place-items: center;
+
+        .icon-audio,
+        img,
+        svg {
+            width: 24px;
+            height: 24px;
+            margin: 0;
         }
     }
 
@@ -2660,13 +2682,14 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__controls {
         min-width: 0;
+        align-items: stretch;
         gap: 11px;
     }
 
     &__play {
         display: inline-flex;
         min-width: 112px;
-        height: 44px;
+        height: 50px;
         align-items: center;
         justify-content: center;
         gap: 8px;
@@ -2707,6 +2730,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         display: grid;
         min-width: 0;
         flex: 1;
+        align-self: center;
         gap: 2px;
     }
 
@@ -2721,6 +2745,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     &__volume {
+        align-self: center;
         gap: 5px;
         color: var(--app-muted);
 
@@ -2903,7 +2928,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 .song {
     .icon-audio {
         display: block;
-        margin: 0 auto;
+        margin: 0;
     }
     .image-loader {
         display: inline-block;
@@ -3133,33 +3158,34 @@ body.light .zone{color:rgba(46,32,13,.72)}
 }
 
 .song-switcher {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 18px;
-
-    &__actions {
-        display: flex;
-        align-items: center;
-        padding: 5px;
-        border: 1px solid var(--app-border);
-        border-radius: 15px;
-        background: var(--app-surface);
-        box-shadow: 0 7px 20px rgba(65, 49, 27, 0.08);
-    }
+    display: grid;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
 
     &__slideshow {
-        display: inline-flex;
-        min-height: 52px;
+        display: flex;
+        width: 100%;
+        min-height: 100%;
         align-items: center;
-        gap: 8px;
-        padding: 0 14px;
+        justify-content: center;
+        flex-direction: column;
+        gap: 9px;
+        padding: 18px 14px;
+        box-sizing: border-box;
         border: 1px solid color-mix(in srgb, var(--app-accent) 34%, transparent);
-        border-radius: 11px;
+        border-radius: 18px;
         color: var(--app-accent-strong);
         background: var(--app-accent-soft);
+        box-shadow: var(--app-shadow);
         font-size: 15px;
         font-weight: 750;
+        cursor: pointer;
+
+        .song-ui-icon {
+            width: 24px;
+            height: 24px;
+        }
 
         &:hover {
             border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
@@ -3171,7 +3197,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
 .song-audio.song-panel {
     width: 100%;
-    margin: 0 0 16px;
+    margin: 0;
     box-sizing: border-box;
 }
 
@@ -3490,6 +3516,26 @@ body.light .zone{color:rgba(46,32,13,.72)}
     box-shadow: none;
 }
 
+@media (max-width: 720px) {
+    .song-action-row,
+    .song-action-row--audio-only,
+    .song-action-row--slides-only {
+        grid-template-columns: minmax(0, 1fr);
+        justify-content: stretch;
+        gap: 10px;
+    }
+
+    .song-switcher {
+        width: 100%;
+
+        &__slideshow {
+            min-height: 56px;
+            flex-direction: row;
+            padding: 12px 14px;
+        }
+    }
+}
+
 @media (max-width: 560px) {
     .song-audio {
         grid-template-columns: 1fr;
@@ -3607,13 +3653,9 @@ body.light .zone{color:rgba(46,32,13,.72)}
     .song-switcher {
         width: 100%;
 
-        &__actions {
-            width: 100%;
-        }
-
         &__slideshow {
             width: 100%;
-            min-height: 46px;
+            min-height: 56px;
             justify-content: center;
             font-size: 14px;
         }
