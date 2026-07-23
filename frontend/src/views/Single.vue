@@ -3758,10 +3758,10 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
         h1 {
             height: auto;
-            min-height: 34px;
+            min-height: 30px;
             padding: 2px 0;
             overflow: visible;
-            font-size: clamp(18px, 5.6vw, 22px);
+            font-size: clamp(16px, 4.5vw, 18px);
             line-height: 1.1;
         }
 
