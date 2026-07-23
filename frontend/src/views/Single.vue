@@ -87,18 +87,25 @@
                 aria-labelledby="song-audio-title"
             >
                 <div class="song-audio__header">
-                    <div class="song-audio__version">
-                        <span id="song-audio-title">Giesmės garso įrašas</span>
-                        <strong>
-                            {{
-                                audioTypes.length
-                                    ? audioTypeLabel(
-                                          selectedAudioType || audioTypes[0],
-                                      )
-                                    : 'Garso įrašų nėra'
-                            }}
-                        </strong>
-                    </div>
+                    <label class="song-audio__selector" for="song-audio-type">
+                        <span id="song-audio-title">Garso įrašo tipas</span>
+                        <select
+                            id="song-audio-type"
+                            v-model="selectedAudioType"
+                            :disabled="!audioTypes.length"
+                        >
+                            <option v-if="!audioTypes.length" value="">
+                                Garso įrašų nėra
+                            </option>
+                            <option
+                                v-for="type in audioTypes"
+                                :key="type"
+                                :value="type"
+                            >
+                                {{ audioTypeLabel(type) }}
+                            </option>
+                        </select>
+                    </label>
                     <div
                         v-if="audioTypes.length > 1"
                         class="song-audio__types"
@@ -117,9 +124,6 @@
                         >
                             <span class="song-audio__type-icon" aria-hidden="true">
                                 <song-icon :name="type" />
-                            </span>
-                            <span class="song-audio__type-label">
-                                {{ audioTypeLabel(type) }}
                             </span>
                         </button>
                     </div>
@@ -192,6 +196,32 @@
                             @input="setAudioVolume"
                         />
                     </label>
+                    <button
+                        type="button"
+                        class="song-audio__mute"
+                        :disabled="!audioTypes.length"
+                        :aria-pressed="audioVolume === 0"
+                        :aria-label="
+                            audioVolume === 0
+                                ? 'Įjungti garsą'
+                                : 'Išjungti garsą'
+                        "
+                        :title="
+                            audioVolume === 0
+                                ? 'Įjungti garsą'
+                                : 'Išjungti garsą'
+                        "
+                        @click="toggleAudioMute"
+                    >
+                        <svg class="song-ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+                            <path d="M11 5 6.5 9H3v6h3.5L11 19Z" />
+                            <path
+                                v-if="audioVolume > 0"
+                                d="M15 9.5a4 4 0 0 1 0 5M17.5 7a7.5 7.5 0 0 1 0 10"
+                            />
+                            <path v-else d="m15 9 6 6m0-6-6 6" />
+                        </svg>
+                    </button>
                 </div>
             </section>
 
@@ -1060,6 +1090,7 @@ export default {
             audioCurrentTime: 0,
             audioDuration: 0,
             audioVolume: 0.85,
+            audioVolumeBeforeMute: 0.85,
             trackLabels: {},
             fontSize: initialLyricsFontSize(),
             slideshowOpen: false,
@@ -2455,7 +2486,19 @@ body.light .zone{color:rgba(46,32,13,.72)}
         setAudioVolume(event) {
             const next = clamp(event.target.value, 0, 1);
             this.audioVolume = next;
+            if (next > 0) this.audioVolumeBeforeMute = next;
             if (this.$refs.audioElement) this.$refs.audioElement.volume = next;
+        },
+        toggleAudioMute() {
+            if (this.audioVolume > 0) {
+                this.audioVolumeBeforeMute = this.audioVolume;
+                this.audioVolume = 0;
+            } else {
+                this.audioVolume = this.audioVolumeBeforeMute || 0.85;
+            }
+            if (this.$refs.audioElement) {
+                this.$refs.audioElement.volume = this.audioVolume;
+            }
         },
         onAudioVersionChange() {
             this.resetAudioState();
@@ -2601,7 +2644,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
     &__header,
     &__controls,
     &__times,
-    &__version,
     &__types,
     &__type,
     &__volume {
@@ -2616,14 +2658,13 @@ body.light .zone{color:rgba(46,32,13,.72)}
         gap: 10px 24px;
     }
 
-    &__version {
-        min-width: 150px;
-        flex: 0 1 190px;
-        align-items: stretch;
-        flex-direction: column;
+    &__selector {
+        display: grid;
+        min-width: 170px;
+        flex: 0 1 220px;
         gap: 3px;
 
-        span {
+        > span {
             color: var(--app-muted);
             font-size: 12px;
             font-weight: 700;
@@ -2631,14 +2672,32 @@ body.light .zone{color:rgba(46,32,13,.72)}
             text-transform: uppercase;
         }
 
-        strong {
+        select {
             min-width: 0;
             width: 100%;
+            height: 38px;
+            padding: 0 30px 0 10px;
+            border: 1px solid var(--app-border);
+            border-radius: 10px;
             color: var(--app-text);
-            font-size: 15px;
+            background: var(--app-surface-soft);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+
+            &:focus-visible {
+                outline: 2px solid var(--app-accent);
+                outline-offset: 2px;
+            }
+
+            &:disabled {
+                color: var(--app-muted);
+                cursor: not-allowed;
+                opacity: 0.72;
+            }
         }
     }
 
@@ -2649,24 +2708,18 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     &__type {
+        width: 38px;
+        min-width: 38px;
         min-height: 38px;
-        gap: 7px;
-        padding: 5px 10px;
+        justify-content: center;
+        gap: 0;
+        padding: 5px;
         border: 1px solid var(--app-border);
         border-radius: 11px;
         color: var(--app-text);
         background: var(--app-surface-soft);
         cursor: pointer;
         transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
-
-        > .song-audio__type-label {
-            max-width: 150px;
-            overflow: hidden;
-            font-size: 13px;
-            font-weight: 700;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
 
         &:hover {
             border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
@@ -2680,10 +2733,6 @@ body.light .zone{color:rgba(46,32,13,.72)}
         }
 
         &--single {
-            width: 38px;
-            min-width: 38px;
-            justify-content: center;
-            padding: 5px;
             cursor: default;
         }
     }
@@ -2797,12 +2846,31 @@ body.light .zone{color:rgba(46,32,13,.72)}
         }
     }
 
-    &--empty {
-        .song-audio__version strong {
-            color: var(--app-muted);
-            font-weight: 600;
+    &__mute {
+        display: none;
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid var(--app-border);
+        border-radius: 11px;
+        color: var(--app-muted);
+        background: var(--app-surface-soft);
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+            color: var(--app-text);
+            background: var(--app-hover);
         }
 
+        &:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    }
+
+    &--empty {
         .song-audio__controls {
             opacity: 0.68;
         }
@@ -3676,7 +3744,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         &__number-row {
             grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr);
             gap: 4px;
-            margin-bottom: 2px;
+            margin-bottom: 6px;
         }
 
         &__navigation {
@@ -3690,10 +3758,10 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
         h1 {
             height: auto;
-            min-height: 44px;
+            min-height: 38px;
             padding: 2px 0;
             overflow: visible;
-            font-size: clamp(24px, 7.2vw, 28px);
+            font-size: clamp(21px, 6.4vw, 25px);
             line-height: 1.08;
         }
 
@@ -3750,33 +3818,32 @@ body.light .zone{color:rgba(46,32,13,.72)}
     .song-audio {
         &__header {
             display: grid;
-            grid-template-areas:
-                'types'
-                'version';
-            grid-template-columns: minmax(0, 1fr);
-            justify-content: stretch;
-            gap: 5px;
+            grid-template-areas: 'selector types';
+            grid-template-columns: minmax(112px, 1fr) auto;
+            align-items: end;
+            gap: 8px;
         }
 
         &__types {
             grid-area: types;
-            justify-content: flex-start;
-            gap: 5px;
+            justify-content: flex-end;
+            gap: 4px;
         }
 
-        &__version {
-            grid-area: version;
+        &__selector {
+            grid-area: selector;
             min-width: 0;
-            align-items: flex-start;
-            gap: 0;
+            width: 100%;
+            gap: 2px;
 
             > span {
-                display: none;
+                font-size: 10px;
             }
 
-            strong {
-                font-size: 12.5px;
-                line-height: 1.2;
+            select {
+                height: 34px;
+                padding-right: 25px;
+                font-size: 12px;
             }
         }
 
@@ -3789,13 +3856,9 @@ body.light .zone{color:rgba(46,32,13,.72)}
             padding: 4px;
             border-radius: 10px;
 
-            > .song-audio__type-label {
-                display: none;
-            }
-
             &--single {
                 grid-area: types;
-                justify-self: start;
+                justify-self: end;
             }
         }
 
@@ -3814,7 +3877,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
         &__controls {
             display: grid;
-            grid-template-columns: auto minmax(64px, 1fr) 28px;
+            grid-template-columns: auto minmax(64px, 1fr) 36px;
             align-items: center;
             gap: 6px;
         }
@@ -3831,29 +3894,14 @@ body.light .zone{color:rgba(46,32,13,.72)}
         }
 
         &__volume {
-            position: relative;
-            display: flex;
-            width: 28px;
-            min-width: 28px;
-            height: 58px;
-            align-self: center;
-            justify-content: center;
-            gap: 0;
+            display: none;
+        }
 
-            > span {
-                display: none;
-            }
-
-            input {
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                width: 54px;
-                height: 18px;
-                margin: 0;
-                transform: translate(-50%, -50%) rotate(-90deg);
-                transform-origin: center;
-            }
+        &__mute {
+            display: grid;
+            width: 36px;
+            min-width: 36px;
+            height: 42px;
         }
     }
 
