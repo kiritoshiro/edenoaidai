@@ -1,35 +1,51 @@
 {
-    "name": "edeno_aidai",
-    "version": "0.1.0",
+    "name": "edeno-aidai",
+    "version": "1.0.0",
     "private": true,
+    "packageManager": "npm@12.0.2",
+    "engines": {
+        "node": "^24.15.0",
+        "npm": ">=12"
+    },
+    "overrides": {
+        "ejs": {
+            "jake": "12.10.1"
+        },
+        "workbox-build": {
+            "glob": "13.0.6"
+        }
+    },
     "scripts": {
-        "serve": "vue-cli-service serve",
-        "build": "vue-cli-service build",
-        "lint": "vue-cli-service lint"
+        "dev": "vite",
+        "serve": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+        "lint": "eslint . --max-warnings=0"
     },
     "dependencies": {
-        "@babel/core": "^7.4.5",
-        "@babel/preset-env": "^7.4.5",
-        "dexie": "^2.0.4",
-        "register-service-worker": "^1.6.2",
-        "vue": "^2.6.10",
-        "vue-router": "^3.0.6",
-        "vue-template-compiler": "^2.6.10",
-        "webpack": "^4.33.0",
-        "workbox-webpack-plugin": "^4.3.1"
+        "dexie": "^4.4.4",
+        "dompurify": "^3.4.12",
+        "vue": "^3.5.40",
+        "vue-router": "^5.2.0"
     },
     "devDependencies": {
-        "@vue/cli-plugin-babel": "^3.8.0",
-        "@vue/cli-plugin-eslint": "^3.8.0",
-        "@vue/cli-service": "^3.8.0",
-        "@vue/eslint-config-airbnb": "^4.0.0",
-        "babel-eslint": "^10.0.1",
-        "eslint": "^5.16.0",
-        "eslint-config-prettier": "^4.3.0",
-        "eslint-plugin-prettier": "^3.1.0",
-        "eslint-plugin-vue": "^5.2.2",
-        "prettier": "^1.18.2",
-        "sass": "^1.21.0",
-        "sass-loader": "^7.1.0"
+        "@eslint/js": "^10.0.1",
+        "@vitejs/plugin-vue": "^6.0.8",
+        "autoprefixer": "^10.5.4",
+        "eslint": "^10.8.0",
+        "eslint-plugin-vue": "^10.10.0",
+        "globals": "^17.8.0",
+        "postcss": "^8.5.25",
+        "sass": "^1.102.0",
+        "vite": "^8.2.0",
+        "vite-plugin-pwa": "^1.3.0",
+        "workbox-build": "^7.4.1",
+        "workbox-cacheable-response": "^7.4.1",
+        "workbox-core": "^7.4.1",
+        "workbox-expiration": "^7.4.1",
+        "workbox-precaching": "^7.4.1",
+        "workbox-routing": "^7.4.1",
+        "workbox-strategies": "^7.4.1",
+        "workbox-window": "^7.4.1"
     }
 }

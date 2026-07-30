@@ -45,7 +45,7 @@
 
 
         <div style="text-align: center; margin-top: 20px;">
-            <div class="song__body" :style="fontSizeStyle" v-html="song.body"></div>
+            <div class="song__body" :style="fontSizeStyle" v-html="sanitizedBody"></div>
         </div>
 
         <div class="image-format-container" style="margin-top: 20px;">
@@ -60,8 +60,8 @@
         </div>
 
         <div class="song-image">
-            <template v-for="(url, index) in imageUrls">
-                <div :key="'image-container-'+index">
+            <template v-for="(url, index) in imageUrls" :key="`image-container-${index}`">
+                <div>
                     <div v-if="!imageLoaded[index]" class="image-loader"></div>
                     <img v-if="!errorImages[index]" v-show="imageLoaded[index]" :src="url" alt="" @load="handleLoad(index)" @error="handleError(index)" />
                     <!--                    <div v-if="errorImages[index]">Image failed to load.</div>-->
@@ -69,12 +69,14 @@
             </template>
         </div>
 
-        <small class="song__copyright" v-html="song.copyright"></small>
+        <small class="song__copyright" v-html="sanitizedCopyright"></small>
 
     </div>
 </template>
 
 <script>
+import { reportError } from '../helpers/reportError';
+import { sanitizeSongHtml } from '../helpers/sanitizeHtml';
 
 export default {
     name: 'Single',
@@ -97,13 +99,7 @@ export default {
             song: null, // Initialize with null
             songIds: [], // Initialize with an empty array
 
-            get fontSize() {
-                return parseInt(localStorage.getItem('fontSize'), 10) || 24;
-            },
-            // eslint-disable-next-line vue/no-dupe-keys
-            set fontSize(newVal) {
-                localStorage.setItem('fontSize', newVal);
-            },
+            fontSize: Number.parseInt(localStorage.getItem('fontSize'), 10) || 24,
         };
     },
 
@@ -116,11 +112,20 @@ export default {
         },
 
         imageUrls() {
+            const songId = encodeURIComponent(this.songId);
             return [
-                `${this.baseUrl}${this.songId}.${this.imageType}`,
-                `${this.baseUrl}${this.songId}_1.${this.imageType}`,
-                `${this.baseUrl}${this.songId}_2.${this.imageType}`
+                `${this.baseUrl}${songId}.${this.imageType}`,
+                `${this.baseUrl}${songId}_1.${this.imageType}`,
+                `${this.baseUrl}${songId}_2.${this.imageType}`,
             ];
+        },
+
+        sanitizedBody() {
+            return sanitizeSongHtml(this.song?.body);
+        },
+
+        sanitizedCopyright() {
+            return sanitizeSongHtml(this.song?.copyright);
         },
 
         disablePreviousButton() {
@@ -144,7 +149,9 @@ export default {
 
     watch: {
         '$route': 'fetchSong',
-
+        fontSize(value) {
+            localStorage.setItem('fontSize', value);
+        },
     },
 
     created() {
@@ -155,13 +162,12 @@ export default {
 
     methods: {
         handleLoad(index) {
-            this.$set(this.imageLoaded, index, true);
+            this.imageLoaded[index] = true;
         },
 
         handleError(index) {
-            this.$set(this.imageLoaded, index, true);  // Mark it as loaded
-            this.$set(this.errorImages, index, true);  // Mark it as having an error
-            console.error(`Image at index ${index} failed to load.`);
+            this.imageLoaded[index] = true;
+            this.errorImages[index] = true;
         },
         imageError() {
             this.error = true;
@@ -172,7 +178,9 @@ export default {
         },
 
         getAudioSourceUrl(key) {
-            return `https://adventistai.lt/giesmes/${key}/${this.song.songId}.mp3`;
+            const track = encodeURIComponent(key);
+            const songId = encodeURIComponent(this.song.songId);
+            return `https://adventistai.lt/giesmes/${track}/${songId}.mp3`;
         },
 
         fetchSongs() {
@@ -232,9 +240,8 @@ export default {
         },
 
 
-        audioError(event) {
-            console.log('got error: ', event)
-
+        audioError() {
+            console.warn('Garso įrašo nepavyko įkelti.');
         },
         toggleFavorite() {
             this.$songs
@@ -248,7 +255,7 @@ export default {
                         // console.info('Failed to toggle favorite');
                     }
                 })
-                .catch(err => Sentry && Sentry.captureException(err));
+                .catch(reportError);
         },
         adjustFontSize(increase) {
             increase ? (this.fontSize += 1) : (this.fontSize -= 1);

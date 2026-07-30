@@ -1,19 +1,18 @@
 <template>
     <main>
-        <router-view/>
-        <!-- Navbar is moved under <main /> on mount -->
-        <navbar></navbar>
+        <RouterView />
     </main>
+    <Navbar />
 </template>
 
 <script>
-    import Navbar from './components/Navbar.vue';
+import Navbar from './components/Navbar.vue';
 
-    export default {
-        components: {
-            Navbar,
-        },
-    };
+export default {
+    components: {
+        Navbar,
+    },
+};
 </script>
 
 

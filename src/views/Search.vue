@@ -1,7 +1,13 @@
 <template>
     <div class="form">
         <div class="input-container">
-            <input type="text" placeholder="Rašykite čia..." :value="query" @input="parseSearch">
+            <input
+                type="search"
+                maxlength="100"
+                placeholder="Rašykite čia..."
+                :value="query || ''"
+                @input="parseSearch"
+            >
         </div>
         <list :songs="songs"/>
     </div>
@@ -9,6 +15,7 @@
 
 <script>
     import List from '../components/List.vue';
+    import { reportError } from '../helpers/reportError';
 
     export default {
         components: {
@@ -31,20 +38,16 @@
             },
         },
         created() {
-            this.parseSearch = this.debounce(this.parseSearch, 20);
+            this.parseSearch = this.debounce(this.parseSearch, 150);
             this.searchSongs();
         },
         methods: {
             debounce(func, wait, immediate = false) {
                 let timeout;
-                /* eslint-disable-next-line func-names */
-                return function() {
+                return function debounced(...args) {
                     const context = this;
-                    /* eslint-disable-next-line prefer-rest-params */
-                    const args = arguments;
 
-                    /* eslint-disable-next-line func-names */
-                    const later = function() {
+                    const later = () => {
                         timeout = null;
                         if (!immediate) func.apply(context, args);
                     };
@@ -57,17 +60,22 @@
                 };
             },
             parseSearch({ target: { value } }) {
-                if (value.trim()) {
-                    this.updateSearchUri(value.trim());
+                const query = value.trim().slice(0, 100);
+                if (!query) {
+                    this.songs = [];
+                    this.$router.replace({ name: 'search' });
+                    return;
                 }
+                this.updateSearchUri(query);
             },
             updateSearchUri(query) {
-                this.$router.push({
-                    path: `/search/${query}`,
+                this.$router.replace({
+                    name: 'search',
+                    params: { query },
                 });
             },
             searchSongs() {
-                const search = this.query;
+                const search = this.query?.trim().slice(0, 100);
                 if (!!search === false) return;
 
                 if (Number.isInteger(Number(search))) {
@@ -79,7 +87,7 @@
                         .then(songs => {
                             this.songs = songs || [];
                         })
-                        .catch(err => Sentry && Sentry.captureException(err));
+                        .catch(reportError);
                     return;
                 }
                 this.$songs
@@ -98,7 +106,7 @@
                     .then(songs => {
                         this.songs = songs || [];
                     })
-                    .catch(err => Sentry && Sentry.captureException(err));
+                    .catch(reportError);
             },
         },
     };

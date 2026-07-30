@@ -1,5 +1,4 @@
-import Vue from 'vue';
-import Router from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 import Home from './views/Home.vue';
 import Single from './views/Single.vue';
 import Search from './views/Search.vue';
@@ -7,11 +6,8 @@ import Install from './views/Install.vue';
 import NotFound from './views/NotFound.vue';
 import Favorites from './views/Favorites.vue';
 
-Vue.use(Router);
-
-export default new Router({
-    mode: 'history',
-    base: process.env.BASE_URL,
+export default createRouter({
+    history: createWebHistory(import.meta.env.BASE_URL),
     linkActiveClass: 'is-active',
     routes: [
         {
@@ -42,7 +38,7 @@ export default new Router({
             component: Install,
         },
         {
-            path: '*',
+            path: '/:pathMatch(.*)*',
             name: 'Not Found',
             component: NotFound,
         },

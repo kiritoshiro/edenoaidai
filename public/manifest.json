@@ -1,6 +1,8 @@
 {
     "name": "Edeno Aidai",
     "short_name": "Edeno Aidai",
+    "id": "/",
+    "scope": "/",
     "icons": [
         {
             "src": "/img/icons/android-icon-36x36.png",

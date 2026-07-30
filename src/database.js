@@ -1,7 +1,5 @@
-/* eslint-disable no-param-reassign */
-
 import Dexie from 'dexie';
-import router from './router';
+import { appConfig } from './config';
 
 /**
  * Returns initialized Dexie database instance
@@ -10,11 +8,6 @@ import router from './router';
 function getDatabaseInstance() {
     const database = new Dexie('edenoAidai');
 
-    // Move the version to localStorage so we can access it in Vue components
-    localStorage.setItem('dbVersion', process.env.VUE_APP_CACHE_VERSION || '1');
-
-
-
     database.version(1).stores({
         songs: '++id, &songId, *title, verse, body, copyright, favorited, lists',
     });
@@ -22,39 +15,22 @@ function getDatabaseInstance() {
     return database;
 }
 
-/**
- * Checks if table is empty and needs to be populated
- *
- * @param {Dexie} table Table of Dexie Database
- */
-function needsInstall(table) {
-    return (
-        table
-            .count()
-            .then(count => {
-                if (localStorage.getItem('databaseUpdated') === 'false' && count > 0) {
-                    return false;
-                }
-
-                localStorage.setItem('databaseUpdated', 'false');
-                return count === 0;
-            })
-            .catch(err => console.error(err))
-    );
-}
-
-
-export default async function(Vue) {
+export async function initializeDatabase(app, router) {
     const database = getDatabaseInstance();
-    Vue.prototype.$songs = database.songs;
-    const cacheVersion = process.env.VUE_APP_CACHE_VERSION || '1';
+    const { cacheVersion } = appConfig;
+    const storedVersion = localStorage.getItem('dbVersion');
 
-// Check if the version stored in localStorage is the same as the current one
-    if (localStorage.getItem('dbVersion') !== cacheVersion) {
-        // If it's not, clear the database and set the new version
-        await database.songs.clear();
-        localStorage.setItem('dbVersion', cacheVersion);
+    app.config.globalProperties.$songs = database.songs;
+    app.provide('songs', database.songs);
+
+    const songCount = await database.songs.count();
+    const needsRefresh = storedVersion !== cacheVersion;
+    if (
+        (songCount === 0 || needsRefresh) &&
+        router.currentRoute.value.path !== '/install'
+    ) {
+        await router.replace({ name: 'install' });
     }
 
-    (await needsInstall(database.songs)) && router.push('/install');
+    return database;
 }

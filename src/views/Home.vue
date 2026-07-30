@@ -1,8 +1,21 @@
+<template>
+    <div>
+        <button type="button" class="update-button" @click="goToInstallPage">
+            Atnaujinti duomenis
+        </button>
+        <List :songs="songs" />
+    </div>
+</template>
+
 <script>
 import List from '../components/List.vue';
+import { reportError } from '../helpers/reportError';
 
 export default {
     name: 'Home',
+    components: {
+        List,
+    },
     data() {
         return {
             songs: [],
@@ -16,27 +29,13 @@ export default {
             .toArray()
             .then(songs => {
                 this.songs = songs;
-            });
+            })
+            .catch(reportError);
     },
     methods: {
         goToInstallPage() {
-            this.$router.push('install');
+            this.$router.push('/install');
         },
-    },
-    render(h) {
-        return h('div', {}, [
-            h('button', {
-                class: 'update-button',
-                on: {
-                    click: this.goToInstallPage,
-                },
-            }, 'Atnaujinti duomenis'),
-            h(List, {
-                props: {
-                    songs: this.songs,
-                },
-            }),
-        ]);
     },
 };
 </script>

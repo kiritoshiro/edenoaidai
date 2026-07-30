@@ -1,4 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+  NPM_VERSION = "12.0.2"
+
 [dev]
-  command = "yarn serve" # Command to start your dev server
-  port = 8080 # Port that the dev server will be listening on
-  publish = "public" # If you use a _redirect file, provide the path to your static content folder
+  command = "npm run dev"
+  port = 8080
+  publish = "dist"

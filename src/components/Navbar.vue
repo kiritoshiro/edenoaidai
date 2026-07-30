@@ -2,9 +2,9 @@
     <footer class="footer">
         <ul class="menu">
             <li>
-                <router-link to="/" class="menu__item" exact>
+                <router-link to="/" class="menu__item">
                     <svg class="icon">
-                        <use xlink:href="#icon-home"></use>
+                        <use href="#icon-home"></use>
                     </svg>
                     Titulinis
                 </router-link>
@@ -12,7 +12,7 @@
             <li>
                 <router-link to="/search" class="menu__item">
                     <svg class="icon">
-                        <use xlink:href="#icon-search"></use>
+                        <use href="#icon-search"></use>
                     </svg>
                     Paieška
                 </router-link>
@@ -21,7 +21,7 @@
             <li>
                 <router-link to="/favorites" class="menu__item">
                     <svg class="icon">
-                        <use xlink:href="#icon-star-full"></use>
+                        <use href="#icon-star-full"></use>
                     </svg>
                     Išsaugota
                 </router-link>
@@ -31,17 +31,9 @@
 </template>
 
 <script>
-    export default {
-        name: 'Navbar',
-        mounted() {
-            // Since Vue root template cannot have two root elements, move footer
-            // navbar to the next sibling to <main/> element right on mount
-            document.body.insertBefore(
-                this.$el,
-                document.querySelector('main').nextSibling,
-            );
-        },
-    };
+export default {
+    name: 'Navbar',
+};
 </script>
 
 <style lang="scss">

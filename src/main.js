@@ -1,16 +1,27 @@
-import Vue from 'vue';
+import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
-import ServiceWorker from './registerServiceWorker';
-import Database from './database';
+import { initializeDatabase } from './database';
+import { reportError } from './helpers/reportError';
+import { registerServiceWorker } from './registerServiceWorker';
 
-Vue.use(Database);
+async function bootstrap() {
+    const app = createApp(App);
 
-Vue.config.productionTip = false;
+    app.use(router);
+    await router.isReady();
+    await initializeDatabase(app, router);
 
-new Vue({
-    router,
-    render: h => h(App),
-}).$mount('main');
+    app.mount('#app');
+    registerServiceWorker();
+}
 
-ServiceWorker();
+bootstrap().catch(error => {
+    reportError(error);
+
+    const appElement = document.querySelector('#app');
+    if (appElement) {
+        appElement.textContent =
+            'Programos nepavyko paleisti. Atnaujinkite puslapį ir bandykite dar kartą.';
+    }
+});
