@@ -53,16 +53,16 @@
                     <input
                         class="song-heading__number-value"
                         type="text"
-                        inputmode="text"
+                        inputmode="decimal"
                         enterkeyhint="go"
                         autocomplete="off"
                         autocapitalize="characters"
                         spellcheck="false"
-                        pattern="[0-9Aa ]*"
+                        pattern="[0-9Aa., ]*"
                         :maxlength="songNumberMaxLength"
                         :value="songNumberInput"
                         :title="songNumberInputTitle"
-                        aria-label="Giesmės numeris"
+                        aria-label="Giesmės numeris; taškas arba kablelis reiškia A"
                         @focus="onSongNumberFocus"
                         @input="onSongNumberInput"
                         @blur="finishSongNumberInput"
@@ -1292,8 +1292,8 @@ export default {
         },
         songNumberInputTitle() {
             return this.maximumSongNumber
-                ? `Įveskite giesmės numerį (iki ${this.maximumSongNumber})`
-                : 'Įveskite giesmės numerį';
+                ? `Įveskite giesmės numerį (taškas arba kablelis = A; iki ${this.maximumSongNumber})`
+                : 'Įveskite giesmės numerį (taškas arba kablelis = A)';
         },
         sourceSlides() {
             if (!this.song) return [];

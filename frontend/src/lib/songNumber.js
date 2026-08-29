@@ -1,7 +1,7 @@
 export function songNumberKey(value) {
     const match = String(value ?? '')
         .trim()
-        .match(/^0*(\d+)\s*([aA])?$/u);
+        .match(/^0*(\d+)\s*([aA.,])?$/u);
 
     if (!match) return '';
 
@@ -32,7 +32,10 @@ export function sanitizeSongNumberInput(value, maximum = 0) {
         if (/\d/u.test(character)) {
             if (!suffix) digits += character;
         } else if (
-            (character === 'a' || character === 'A') &&
+            (character === 'a' ||
+                character === 'A' ||
+                character === '.' ||
+                character === ',') &&
             digits &&
             !suffix
         ) {
