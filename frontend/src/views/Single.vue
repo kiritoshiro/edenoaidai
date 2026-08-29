@@ -48,10 +48,28 @@
                     <strong>{{ previousSongId || '—' }}</strong>
                 </button>
 
-                <span class="song-heading__number">
+                <label class="song-heading__number">
                     <span class="song-heading__number-label">Giesmė</span>
-                    <span class="song-heading__number-value">{{ song.songId }}</span>
-                </span>
+                    <input
+                        class="song-heading__number-value"
+                        type="text"
+                        inputmode="text"
+                        enterkeyhint="go"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        spellcheck="false"
+                        pattern="[0-9Aa ]*"
+                        :maxlength="songNumberMaxLength"
+                        :value="songNumberInput"
+                        :title="songNumberInputTitle"
+                        aria-label="Giesmės numeris"
+                        @focus="onSongNumberFocus"
+                        @input="onSongNumberInput"
+                        @blur="finishSongNumberInput"
+                        @keydown.enter.prevent="blurSongNumberInput"
+                        @keydown.esc.prevent="cancelSongNumberInput"
+                    />
+                </label>
 
                 <button
                     class="song-heading__navigation song-heading__navigation--next"
@@ -1008,6 +1026,12 @@
 <script>
 import { config } from '../lib/config';
 import { lyricsToPlainText } from '../lib/lyrics';
+import {
+    findSongIdByNumber,
+    formatSongNumber,
+    maximumSongNumber as getMaximumSongNumber,
+    sanitizeSongNumberInput,
+} from '../lib/songNumber';
 import { appTheme, toggleAppTheme } from '../lib/theme';
 import SongIcon from '../components/SongIcon.vue';
 
@@ -1105,6 +1129,8 @@ export default {
             song: null,
             songIds: [],
             songCatalog: [],
+            songNumberInput: formatSongNumber(this.songId),
+            songNumberEditing: false,
             imageType:
                 localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
             preferredNoteFormat:
@@ -1255,6 +1281,19 @@ export default {
                 this.currentIndex < this.songIds.length - 1
                 ? this.songIds[this.currentIndex + 1]
                 : '';
+        },
+        maximumSongNumber() {
+            return getMaximumSongNumber(this.songIds);
+        },
+        songNumberMaxLength() {
+            return this.maximumSongNumber
+                ? String(this.maximumSongNumber).length + 2
+                : 20;
+        },
+        songNumberInputTitle() {
+            return this.maximumSongNumber
+                ? `Įveskite giesmės numerį (iki ${this.maximumSongNumber})`
+                : 'Įveskite giesmės numerį';
         },
         sourceSlides() {
             if (!this.song) return [];
@@ -1426,7 +1465,10 @@ export default {
                 this.selectedAudioType = requested;
             }
         },
-        songId() {
+        songId(value) {
+            if (!this.songNumberEditing) {
+                this.songNumberInput = formatSongNumber(value);
+            }
             this.closeNotesFullscreen();
             this.resetAudioState();
             if (!this.presenterConnected) this.closeSlideshow();
@@ -1591,6 +1633,58 @@ export default {
     methods: {
         toggleTheme() {
             toggleAppTheme();
+        },
+        onSongNumberFocus(event) {
+            this.songNumberEditing = true;
+            event.currentTarget?.select();
+        },
+        onSongNumberInput(event) {
+            const sanitized = sanitizeSongNumberInput(
+                event.currentTarget?.value,
+                this.maximumSongNumber,
+            );
+            this.songNumberInput = sanitized;
+            if (event.currentTarget && event.currentTarget.value !== sanitized) {
+                event.currentTarget.value = sanitized;
+            }
+            this.openTypedSong();
+        },
+        openTypedSong() {
+            const matchingSongId = findSongIdByNumber(
+                this.songNumberInput,
+                this.songIds,
+            );
+            if (!matchingSongId || matchingSongId === this.songId) return;
+
+            this.$router.replace({
+                name: 'single',
+                params: { songId: matchingSongId },
+            });
+        },
+        finishSongNumberInput(event) {
+            const matchingSongId = findSongIdByNumber(
+                this.songNumberInput,
+                this.songIds,
+            );
+            this.songNumberEditing = false;
+            this.songNumberInput = formatSongNumber(
+                matchingSongId || this.songId,
+            );
+
+            if (matchingSongId && matchingSongId !== this.songId) {
+                this.$router.replace({
+                    name: 'single',
+                    params: { songId: matchingSongId },
+                });
+            }
+        },
+        blurSongNumberInput(event) {
+            event.currentTarget?.blur();
+        },
+        cancelSongNumberInput(event) {
+            this.songNumberEditing = false;
+            this.songNumberInput = formatSongNumber(this.songId);
+            event.currentTarget?.blur();
         },
         toggleSlideshowSettings() {
             if (this.slideshowSettingsOpen) {
@@ -2701,6 +2795,15 @@ body.light .zone{color:rgba(46,32,13,.72)}
                         songId: song.songId,
                         title: song.title,
                     }));
+                    if (this.songNumberEditing) {
+                        this.songNumberInput = sanitizeSongNumberInput(
+                            this.songNumberInput,
+                            this.maximumSongNumber,
+                        );
+                        this.openTypedSong();
+                    } else {
+                        this.songNumberInput = formatSongNumber(this.songId);
+                    }
                 })
                 .catch(error => console.error(error));
         },
@@ -3402,7 +3505,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
 
     &__number-row {
         display: grid;
-        grid-template-columns: 96px 140px 96px;
+        grid-template-columns: 96px 160px 96px;
         align-items: center;
         justify-content: center;
         gap: 16px;
@@ -3475,11 +3578,38 @@ body.light .zone{color:rgba(46,32,13,.72)}
     }
 
     &__number-value {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 0 4px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        outline: 0;
         font-family: Georgia, 'Times New Roman', serif;
         font-size: clamp(42px, 7vw, 58px);
         font-weight: 600;
+        font-variant-numeric: tabular-nums;
         letter-spacing: -0.04em;
+        line-height: 1;
+        color: inherit;
+        background: transparent;
+        caret-color: var(--app-accent-strong);
+        text-align: center;
         white-space: nowrap;
+        appearance: none;
+        transition: border-color 0.16s ease, background-color 0.16s ease,
+            box-shadow 0.16s ease;
+
+        &:hover {
+            background: var(--app-surface-soft);
+        }
+
+        &:focus {
+            border-color: var(--app-accent);
+            background: var(--app-surface);
+            box-shadow: 0 0 0 3px var(--app-accent-soft);
+        }
     }
 
     h1 {
@@ -3974,7 +4104,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
         padding: 0 8px;
 
         &__number-row {
-            grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr);
+            grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
             gap: 4px;
             margin-bottom: 6px;
         }
