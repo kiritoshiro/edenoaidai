@@ -6,7 +6,7 @@
     "scripts": {
         "dev": "vite",
         "build": "node scripts/build.mjs",
-        "test": "node --test src/lib/songNumber.test.js",
+        "test": "node --test src/lib/*.test.js",
         "preview": "vite preview",
         "release": "node scripts/build.mjs && node scripts/sync-to-server.mjs"
     },

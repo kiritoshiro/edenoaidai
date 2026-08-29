@@ -19,10 +19,31 @@
             />
         </div>
 
-        <p v-if="query && songs.length" class="search-page__count">
-            Rasta: {{ songs.length }}
+        <p v-if="query && results.length" class="search-page__count">
+            Rasta: {{ results.length }}
         </p>
-        <list v-if="songs.length" :songs="songs" />
+
+        <div v-if="results.length" class="search-results">
+            <template v-for="group in resultGroups" :key="group.type">
+                <section
+                    v-if="group.songs.length"
+                    class="search-results__group"
+                    :aria-labelledby="`search-results-${group.type}`"
+                >
+                    <h2
+                        :id="`search-results-${group.type}`"
+                        class="search-results__heading"
+                    >
+                        {{ group.label }}
+                        <span>{{ group.songs.length }}</span>
+                    </h2>
+                    <list
+                        :songs="group.songs"
+                        :search-matches="searchMatches"
+                    />
+                </section>
+            </template>
+        </div>
 
         <div v-else-if="query" class="empty-state">
             <div>
@@ -40,28 +61,7 @@
 
 <script>
 import List from '../components/List.vue';
-
-// Lithuanian diacritics folded to their base letters for search
-const LT_MAP = {
-    ą: 'a',
-    č: 'c',
-    ę: 'e',
-    ė: 'e',
-    į: 'i',
-    š: 's',
-    ų: 'u',
-    ū: 'u',
-    ž: 'z',
-};
-
-function fold(value) {
-    return String(value || '')
-        .toLowerCase()
-        .replace(/[ąčęėįšųūž]/g, ch => LT_MAP[ch])
-        .replace(/[!–—,.:;?"'()]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
+import { createSongSearchResults } from '../lib/songSearch.js';
 
 function debounce(fn, wait) {
     let timeout;
@@ -84,8 +84,30 @@ export default {
     },
     data() {
         return {
-            songs: [],
+            results: [],
+            searchRequestId: 0,
         };
+    },
+    computed: {
+        resultGroups() {
+            const groups = [
+                { type: 'number', label: 'Pagal numerį' },
+                { type: 'title', label: 'Pagal pavadinimą' },
+                { type: 'content', label: 'Giesmės žodžiuose' },
+            ];
+
+            return groups.map(group => ({
+                ...group,
+                songs: this.results
+                    .filter(result => result.matchType === group.type)
+                    .map(result => result.song),
+            }));
+        },
+        searchMatches() {
+            return Object.fromEntries(
+                this.results.map(result => [String(result.song.songId), result]),
+            );
+        },
     },
     watch: {
         $route() {
@@ -114,43 +136,26 @@ export default {
         },
         searchSongs() {
             const search = (this.query || '').trim();
+            const requestId = ++this.searchRequestId;
             if (!search) {
-                this.songs = [];
+                this.results = [];
                 return;
             }
 
-            // Numeric query – search by song number
-            if (Number.isInteger(Number(search))) {
-                this.$songs
-                    .where('songId')
-                    .startsWith(search)
-                    .limit(100)
-                    .toArray()
-                    .then(songs => {
-                        this.songs = songs || [];
-                    })
-                    .catch(error => console.error(error));
-                return;
-            }
-
-            // Text query – search title and body, diacritics-insensitive
-            const needle = fold(search);
             this.$songs
-                .filter(song => {
-                    const title = Array.isArray(song.title)
-                        ? song.title.join(' ')
-                        : song.title;
-                    return (
-                        fold(song.body).includes(needle) ||
-                        fold(title).includes(needle)
-                    );
-                })
-                .limit(300)
                 .toArray()
                 .then(songs => {
-                    this.songs = songs || [];
+                    if (requestId !== this.searchRequestId) return;
+                    this.results = createSongSearchResults(
+                        songs || [],
+                        search,
+                        300,
+                    );
                 })
-                .catch(error => console.error(error));
+                .catch(error => {
+                    if (requestId === this.searchRequestId) this.results = [];
+                    console.error(error);
+                });
         },
     },
 };
@@ -227,6 +232,39 @@ export default {
 
         p {
             margin: 0;
+        }
+    }
+}
+
+.search-results {
+    display: grid;
+    gap: 22px;
+
+    &__group {
+        min-width: 0;
+    }
+
+    &__heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 4px 9px;
+        color: var(--app-text);
+        font-size: 15px;
+        font-weight: 750;
+
+        span {
+            display: inline-flex;
+            min-width: 24px;
+            height: 24px;
+            align-items: center;
+            justify-content: center;
+            padding: 0 7px;
+            border-radius: 999px;
+            color: var(--app-accent-strong);
+            background: var(--app-accent-soft);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
         }
     }
 }

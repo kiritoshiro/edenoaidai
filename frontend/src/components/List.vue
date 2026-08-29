@@ -7,9 +7,39 @@
             class="element"
         >
             <router-link class="element__main" :to="`/song/${song.songId}`">
-                <span class="element__number">{{ song.songId }}</span>
+                <span class="element__number">
+                    <template
+                        v-for="(segment, index) in numberSegments(song)"
+                        :key="`number-${index}`"
+                    >
+                        <mark v-if="segment.highlighted">{{ segment.text }}</mark>
+                        <span v-else>{{ segment.text }}</span>
+                    </template>
+                </span>
 
-                <p class="element__title">{{ song.title }}</p>
+                <div class="element__copy">
+                    <p class="element__title">
+                        <template
+                            v-for="(segment, index) in titleSegments(song)"
+                            :key="`title-${index}`"
+                        >
+                            <mark v-if="segment.highlighted">{{ segment.text }}</mark>
+                            <span v-else>{{ segment.text }}</span>
+                        </template>
+                    </p>
+                    <p
+                        v-if="excerptSegments(song).length"
+                        class="element__excerpt"
+                    >
+                        <template
+                            v-for="(segment, index) in excerptSegments(song)"
+                            :key="`excerpt-${index}`"
+                        >
+                            <mark v-if="segment.highlighted">{{ segment.text }}</mark>
+                            <span v-else>{{ segment.text }}</span>
+                        </template>
+                    </p>
+                </div>
             </router-link>
 
             <div class="icons">
@@ -45,6 +75,10 @@ export default {
             type: Array,
             required: true,
         },
+        searchMatches: {
+            type: Object,
+            default: () => ({}),
+        },
     },
     watch: {
         songs() {
@@ -58,6 +92,28 @@ export default {
         this.tryScrollToLast();
     },
     methods: {
+        matchFor(song) {
+            return this.searchMatches[String(song?.songId || '')] || null;
+        },
+        numberSegments(song) {
+            const segments = this.matchFor(song)?.numberSegments;
+            return Array.isArray(segments) && segments.length
+                ? segments
+                : [{ text: String(song?.songId || ''), highlighted: false }];
+        },
+        titleSegments(song) {
+            const segments = this.matchFor(song)?.titleSegments;
+            const title = Array.isArray(song?.title)
+                ? song.title.filter(Boolean).join(' ')
+                : String(song?.title || '');
+            return Array.isArray(segments) && segments.length
+                ? segments
+                : [{ text: title, highlighted: false }];
+        },
+        excerptSegments(song) {
+            const segments = this.matchFor(song)?.excerptSegments;
+            return Array.isArray(segments) ? segments : [];
+        },
         // When returning from a song view, centre the list on that song
         tryScrollToLast() {
             const target = window.__scrollToSong;
@@ -121,11 +177,31 @@ export default {
         font-variant-numeric: tabular-nums;
     }
 
-    &__title {
+    &__copy {
         min-width: 0;
         padding: 12px 8px 12px 2px;
+    }
+
+    &__title {
+        min-width: 0;
         margin: 0;
         font-weight: 650;
+    }
+
+    &__excerpt {
+        margin: 4px 0 0;
+        color: var(--app-muted);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    mark {
+        padding: 0 0.08em;
+        border-radius: 3px;
+        color: inherit;
+        background: color-mix(in srgb, var(--app-accent) 34%, transparent);
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
     }
 
     &:hover {
@@ -204,10 +280,17 @@ export default {
             font-size: 14px;
         }
 
-        &__title {
+        &__copy {
             padding-top: 10px;
             padding-bottom: 10px;
+        }
+
+        &__title {
             font-size: 15px;
+        }
+
+        &__excerpt {
+            font-size: 12px;
         }
     }
 
