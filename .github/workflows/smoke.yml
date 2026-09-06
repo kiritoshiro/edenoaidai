@@ -1,0 +1,81 @@
+name: Production smoke test
+
+# Verifies the LIVE site, not this commit. Deploys here happen separately
+# (manual upload, or the admin panel's GitHub self-updater), so a failure
+# here means "production is currently broken or stale" — it says nothing
+# about whether the commit that triggered this run is itself good, and a
+# push landing here doesn't guarantee anything was actually deployed yet.
+#
+# This exact check — does the bundle index.html references actually load,
+# above a sane size — is what would have caught the 2026-09-06 outage
+# immediately instead of it going unnoticed until a hard refresh.
+#
+# Unattended, scheduled monitoring (with an issue opened on failure) is a
+# separate workflow: health.yml. Kept apart because "someone just pushed,
+# let's check" and "nobody touched anything, is it still up" call for
+# different failure handling — the latter needs dedup/issue-close logic the
+# former doesn't.
+
+on:
+  push:
+    branches: [v2]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Smoke test giesmynas.adventistai.lt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch app shell (cache-busted)
+        id: shell
+        run: |
+          site="https://giesmynas.adventistai.lt"
+          bust="_=$(date +%s%N)"
+
+          status=$(curl -s -o index.html -w '%{http_code}' "$site/?$bust")
+          if [ "$status" != "200" ]; then
+            echo "::error::GET / returned $status" >&2
+            exit 1
+          fi
+
+          asset=$(grep -o 'assets/index-[^"]*\.js' index.html | head -1)
+          if [ -z "$asset" ]; then
+            echo "::error::Could not find a main JS bundle reference in index.html — the shell markup itself may be broken." >&2
+            exit 1
+          fi
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch main bundle and check it isn't truncated
+        run: |
+          site="https://giesmynas.adventistai.lt"
+          bust="_=$(date +%s%N)"
+          asset="${{ steps.shell.outputs.asset }}"
+
+          size=$(curl -s -o /dev/null -w '%{size_download}' "$site/$asset?$bust")
+          status=$(curl -s -o /dev/null -w '%{http_code}' "$site/$asset?$bust")
+
+          if [ "$status" != "200" ]; then
+            echo "::error::index.html references $asset but it returned $status — this is exactly the failure mode from the 2026-09-06 outage (stale shell pointing at a deleted/renamed bundle)." >&2
+            exit 1
+          fi
+
+          # The real bundle is ~288 KB. The corrupted one that caused the
+          # outage was exactly 16,000 bytes. 50 KB is a generous floor that
+          # won't false-positive on legitimate size changes but will always
+          # catch truncation.
+          if [ "$size" -lt 50000 ]; then
+            echo "::error::$asset is only $size bytes (expected >50000) — looks truncated, the same signature as the 2026-09-06 outage." >&2
+            exit 1
+          fi
+
+          echo "OK: $asset is $size bytes"
+
+      - name: API root responds
+        run: |
+          site="https://giesmynas.adventistai.lt"
+          bust="_=$(date +%s%N)"
+          body=$(curl -s "$site/api?$bust")
+          echo "$body" | grep -q '"ok":true' || {
+            echo "::error::GET /api did not return ok:true. Body: $body" >&2
+            exit 1
+          }
