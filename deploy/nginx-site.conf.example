@@ -57,7 +57,7 @@ server {
     }
 
     # Always revalidate the application shell and service worker.
-    location ~* ^/(index\.html|sw\.js|manifest\.json)$ {
+    location ~* ^/(index\.html|sw\.js|manifest\.json|version\.json)$ {
         try_files $uri =404;
         expires -1;
         add_header Cache-Control "no-cache";

@@ -76,6 +76,21 @@ function audio_dir(): string
     return files_dir() . '/audio';
 }
 
+// Read the version.json that frontend/scripts/build.mjs writes next to
+// index.html. This reflects whatever build is actually deployed, regardless
+// of whether it got here via manual upload or the GitHub self-updater (which
+// copies it along with everything else in server/) — unlike tracking "the
+// last ref the updater applied", it can't go stale from a manual deploy.
+function deployed_version(): ?array
+{
+    $path = dirname(__DIR__, 2) . '/version.json';
+    if (!is_file($path)) {
+        return null;
+    }
+    $data = json_decode((string) file_get_contents($path), true);
+    return is_array($data) ? $data : null;
+}
+
 // ─── HTTP pagalbininkai ──────────────────────────────────────────────
 
 function json_out(mixed $data, int $code = 200): never

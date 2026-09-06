@@ -1,5 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
@@ -55,6 +56,27 @@ async function createPrecacheManifest() {
     return manifest.sort((left, right) => left.url.localeCompare(right.url));
 }
 
+// Record which commit this build came from, so the admin "Atnaujinimas" page
+// can show what is actually deployed without asking GitHub. This only works
+// from a git checkout (the self-updater ships this file along with the rest
+// of server/ instead of regenerating it, since it never runs npm at all).
+function readGitVersion() {
+    const git = (...args) => execFileSync('git', args, { cwd: frontendDir }).toString().trim();
+    try {
+        return {
+            sha: git('rev-parse', 'HEAD'),
+            shortSha: git('rev-parse', '--short', 'HEAD'),
+            branch: git('rev-parse', '--abbrev-ref', 'HEAD'),
+            message: git('log', '-1', '--format=%s'),
+            date: git('log', '-1', '--format=%aI'),
+            dirty: git('status', '--porcelain').length > 0,
+            builtAt: new Date().toISOString(),
+        };
+    } catch {
+        return null;
+    }
+}
+
 // First build the Vue application and copy public/ assets into dist/.
 await build({
     root: frontendDir,
@@ -89,3 +111,11 @@ await build({
 });
 
 console.log(`Generated sw.js with ${precacheManifest.length} precache entries.`);
+
+const version = readGitVersion();
+if (version) {
+    await writeFile(path.join(distDir, 'version.json'), JSON.stringify(version, null, 2));
+    console.log(`Recorded version ${version.shortSha} (${version.branch}).`);
+} else {
+    console.warn('Not a git checkout – version.json was not written.');
+}

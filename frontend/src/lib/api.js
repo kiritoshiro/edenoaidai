@@ -152,6 +152,7 @@ export const api = {
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
+    githubCurrent: () => request('/api/github/current'),
     githubCommits: () => request('/api/github/commits'),
     githubReleases: () => request('/api/github/releases'),
     updateFromGithub: (source, ref) =>

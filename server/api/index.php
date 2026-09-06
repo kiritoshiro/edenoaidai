@@ -122,6 +122,13 @@ if ($first === 'export' && $method === 'GET' && count($segments) === 2 && $segme
     );
 }
 
+// GET /api/github/current – reads the local version.json, no GitHub API call.
+// Kept outside the try/catch below so it still answers (or cleanly returns
+// null) even when GitHub itself is unreachable or rate-limited.
+if ($first === 'github' && $method === 'GET' && count($segments) === 2 && $segments[1] === 'current') {
+    json_out(['deployed' => deployed_version()]);
+}
+
 // GET /api/github/commits | /api/github/releases
 if ($first === 'github' && $method === 'GET' && count($segments) === 2) {
     try {
