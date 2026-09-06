@@ -86,5 +86,35 @@ export const api = {
         form.append('file', file);
         return request('/api/import/db', { method: 'POST', body: form });
     },
+    exportDatabase: async () => {
+        const response = await fetch(`${config.apiUrl}/api/export/database`, {
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            let message = `Klaida (${response.status})`;
+            try {
+                const data = await response.json();
+                if (data && data.error) message = data.error;
+            } catch {
+                /* not JSON */
+            }
+            throw new Error(message);
+        }
+
+        const blob = await response.blob();
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filename =
+            disposition.match(/filename="([^"]+)"/i)?.[1] ||
+            'edeno-aidai-database.json';
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
     backups: () => request('/api/backups'),
 };

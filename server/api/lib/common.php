@@ -87,6 +87,23 @@ function json_out(mixed $data, int $code = 200): never
     exit;
 }
 
+function json_download(mixed $data, string $filename): never
+{
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    if ($json === false) {
+        fail(500, 'Nepavyko sugeneruoti JSON failo');
+    }
+
+    $safeFilename = preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) ?: 'edeno-aidai-database.json';
+    http_response_code(200);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $safeFilename . '"');
+    header('Content-Length: ' . strlen($json));
+    header('Cache-Control: no-store');
+    echo $json;
+    exit;
+}
+
 function fail(int $code, string $message): never
 {
     json_out(['error' => $message], $code);
@@ -650,4 +667,36 @@ function build_public_db(PDO $db): array
 function build_public_tracks(PDO $db): array
 {
     return array_map(fn ($row) => track_to_api($db, $row), fetch_track_types($db));
+}
+
+/**
+ * Complete content backup. It contains the data needed to rebuild the
+ * application database, but deliberately excludes credentials, sessions, and
+ * binary media files such as MP3 and sheet-music files.
+ */
+function build_database_export(PDO $db): array
+{
+    $lists = fetch_lists_map($db);
+    $rows = $db->query(
+        'SELECT * FROM songs ORDER BY CAST(song_id AS UNSIGNED), song_id',
+    )->fetchAll();
+    $songs = array_map(
+        fn ($row) => song_to_api($row, $lists[$row['song_id']] ?? []),
+        $rows,
+    );
+
+    $trackTypes = [];
+    foreach (fetch_track_types($db) as $row) {
+        $track = track_to_api($db, $row);
+        $track['sortOrder'] = (int) $row['sort_order'];
+        $trackTypes[] = $track;
+    }
+
+    return [
+        'format' => 'edeno-aidai-database',
+        'version' => 1,
+        'exportedAt' => gmdate(DATE_ATOM),
+        'songs' => $songs,
+        'trackTypes' => $trackTypes,
+    ];
 }

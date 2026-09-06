@@ -44,7 +44,7 @@ function validate_songs_json(mixed $parsed): array
 function validate_tracks_json(mixed $parsed): array
 {
     if (!is_array($parsed) || array_is_list($parsed) === false) {
-        throw new InvalidArgumentException('tracks.json turi būti masyvas');
+        throw new InvalidArgumentException('Įrašų tipai turi būti masyvas');
     }
     $types = [];
     foreach ($parsed as $index => $entry) {
@@ -55,11 +55,14 @@ function validate_tracks_json(mixed $parsed): array
         $label = isset($entry['label']) && is_string($entry['label']) && trim($entry['label']) !== ''
             ? trim($entry['label'])
             : $name;
+        $sortOrder = isset($entry['sort_order']) && is_numeric($entry['sort_order'])
+            ? max(0, (int) $entry['sort_order'])
+            : $index + 1;
         $types[] = [
             'name' => $name,
             'label' => $label,
             'icon' => isset($entry['icon']) && is_string($entry['icon']) ? $entry['icon'] : null,
-            'sort_order' => $index + 1,
+            'sort_order' => $sortOrder,
             'tracks' => array_values(array_filter(
                 is_array($entry['tracks'] ?? null) ? array_map('strval', $entry['tracks']) : [],
                 fn ($id) => preg_match(SONG_ID_RE, $id) === 1,
@@ -67,6 +70,36 @@ function validate_tracks_json(mixed $parsed): array
         ];
     }
     return $types;
+}
+
+function validate_database_export(mixed $parsed): array
+{
+    if (!is_array($parsed) || ($parsed['format'] ?? '') !== 'edeno-aidai-database') {
+        throw new InvalidArgumentException('Tai nėra Edeno Aidai pilnos duomenų bazės failas');
+    }
+    if ((int) ($parsed['version'] ?? 0) !== 1) {
+        throw new InvalidArgumentException('Nepalaikoma duomenų bazės failo versija');
+    }
+
+    $songs = validate_songs_json($parsed['songs'] ?? null);
+    $rawTypes = $parsed['trackTypes'] ?? null;
+    if (!is_array($rawTypes) || array_is_list($rawTypes) === false) {
+        throw new InvalidArgumentException('trackTypes turi būti masyvas');
+    }
+
+    $trackEntries = [];
+    foreach ($rawTypes as $index => $entry) {
+        if (!is_array($entry)) {
+            throw new InvalidArgumentException('Rastas netinkamas įrašų tipo įrašas');
+        }
+        $entry['sort_order'] = $entry['sortOrder'] ?? ($entry['sort_order'] ?? $index + 1);
+        $trackEntries[] = $entry;
+    }
+
+    return [
+        'songs' => $songs,
+        'trackTypes' => validate_tracks_json($trackEntries),
+    ];
 }
 
 // Giesmės: atnaujinamos pagal song_id, naujos pridedamos, failo nebeturimos
@@ -111,21 +144,61 @@ function import_songs(PDO $db, array $rows): int
     return count($rows);
 }
 
-// Įrašų tipai: pakeičiami pagal failą, priskyrimai perstatomi iš 'tracks'
-// masyvų (praleidžiant duomenų bazėje neegzistuojančias giesmes).
-function import_tracks(PDO $db, array $types): int
+// Pilnas turinio atkūrimas: giesmės, įrašų tipai ir jų priskyrimai.
+// Prisijungimai, sesijos ir fiziniai MP3 / natų failai į JSON neįtraukiami.
+function import_database(PDO $db, array $songs, array $types): array
 {
     $db->beginTransaction();
     try {
-        $upsert = $db->prepare(
+        $upsertSong = $db->prepare(
+            'INSERT INTO songs (song_id, title, verse, body, slides_json, copyright)
+             VALUES (:song_id, :title, :verse, :body, :slides_json, :copyright)
+             ON DUPLICATE KEY UPDATE
+                 title = :u_title, verse = :u_verse, body = :u_body,
+                 slides_json = :u_slides_json, copyright = :u_copyright',
+        );
+        $songIds = [];
+        foreach ($songs as $song) {
+            $upsertSong->execute([
+                ':song_id' => $song['song_id'],
+                ':title' => $song['title'],
+                ':verse' => $song['verse'],
+                ':body' => $song['body'],
+                ':slides_json' => $song['slides_json'],
+                ':copyright' => $song['copyright'],
+                ':u_title' => $song['title'],
+                ':u_verse' => $song['verse'],
+                ':u_body' => $song['body'],
+                ':u_slides_json' => $song['slides_json'],
+                ':u_copyright' => $song['copyright'],
+            ]);
+            $songIds[] = $song['song_id'];
+        }
+
+        $songPlaceholders = implode(',', array_fill(0, count($songIds), '?'));
+        $db->prepare("DELETE FROM songs WHERE song_id NOT IN ($songPlaceholders)")
+            ->execute($songIds);
+
+        // Track assignments are part of the export, so replace them together
+        // with the recording-category metadata.
+        $db->exec('DELETE FROM song_tracks');
+        if ($types) {
+            $typeNames = array_column($types, 'name');
+            $typePlaceholders = implode(',', array_fill(0, count($typeNames), '?'));
+            $db->prepare("DELETE FROM track_types WHERE name NOT IN ($typePlaceholders)")
+                ->execute($typeNames);
+        } else {
+            $db->exec('DELETE FROM track_types');
+        }
+
+        $upsertType = $db->prepare(
             'INSERT INTO track_types (name, label, icon, sort_order)
              VALUES (:name, :label, :icon, :sort_order)
              ON DUPLICATE KEY UPDATE
                  label = :u_label, icon = :u_icon, sort_order = :u_sort_order',
         );
-        $names = [];
         foreach ($types as $type) {
-            $upsert->execute([
+            $upsertType->execute([
                 ':name' => $type['name'],
                 ':label' => $type['label'],
                 ':icon' => $type['icon'],
@@ -134,33 +207,33 @@ function import_tracks(PDO $db, array $types): int
                 ':u_icon' => $type['icon'],
                 ':u_sort_order' => $type['sort_order'],
             ]);
-            $names[] = $type['name'];
         }
 
-        if ($names) {
-            $placeholders = implode(',', array_fill(0, count($names), '?'));
-            $db->prepare("DELETE FROM track_types WHERE name NOT IN ($placeholders)")->execute($names);
-        } else {
-            $db->exec('DELETE FROM track_types');
-        }
-
-        $existing = array_flip(array_column($db->query('SELECT song_id FROM songs')->fetchAll(), 'song_id'));
-        $db->exec('DELETE FROM song_tracks');
-        $insert = $db->prepare('INSERT IGNORE INTO song_tracks (song_id, type_name) VALUES (?, ?)');
+        $insertAssignment = $db->prepare(
+            'INSERT IGNORE INTO song_tracks (song_id, type_name) VALUES (?, ?)',
+        );
+        $knownSongs = array_fill_keys($songIds, true);
+        $knownTypes = array_fill_keys(array_column($types, 'name'), true);
         foreach ($types as $type) {
             foreach ($type['tracks'] as $songId) {
-                if (isset($existing[$songId])) {
-                    $insert->execute([$songId, $type['name']]);
+                if (isset($knownSongs[$songId]) && isset($knownTypes[$type['name']])) {
+                    $insertAssignment->execute([$songId, $type['name']]);
                 }
             }
         }
 
         $db->commit();
     } catch (Throwable $e) {
-        $db->rollBack();
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
         throw $e;
     }
-    return count($types);
+
+    return [
+        'songs' => count($songs),
+        'trackTypes' => count($types),
+    ];
 }
 
 // Prieš pakeitimą – dabartinės būsenos JSON kopija į storage/backups/
@@ -171,7 +244,7 @@ function backup_database(PDO $db, string $name): string
         mkdir($dir, 0775, true);
     }
     $stamp = str_replace([':', '.'], '-', date('Y-m-d\TH-i-s'));
-    $data = $name === 'db' ? build_public_db($db) : build_public_tracks($db);
+    $data = $name === 'db' ? build_database_export($db) : build_public_tracks($db);
     $target = "$dir/$name-$stamp.json";
     file_put_contents($target, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
     return $target;

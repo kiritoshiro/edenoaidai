@@ -109,6 +109,18 @@ if ($first === 'public' && $method === 'GET' && count($segments) === 2) {
     }
 }
 
+// GET /api/export/database
+if ($first === 'export' && $method === 'GET' && count($segments) === 2 && $segments[1] === 'database') {
+    $db = pdo();
+    // Keep the exported recording assignments aligned with the current audio
+    // folder structure before taking the snapshot.
+    sync_audio_library($db);
+    json_download(
+        build_database_export($db),
+        'edeno-aidai-database-' . gmdate('Y-m-d-His') . '.json',
+    );
+}
+
 // POST /api/login
 if ($first === 'login' && $method === 'POST') {
     $ip = client_ip();
@@ -450,13 +462,22 @@ if ($first === 'import' && count($segments) === 2 && $method === 'POST') {
 
     try {
         if ($segments[1] === 'db') {
+            if (($parsed['format'] ?? '') === 'edeno-aidai-database') {
+                $export = validate_database_export($parsed);
+                backup_database($db, 'db');
+                $result = import_database($db, $export['songs'], $export['trackTypes']);
+                json_out([
+                    'ok' => true,
+                    'format' => 'edeno-aidai-database',
+                    'count' => $result['songs'],
+                    'trackTypes' => $result['trackTypes'],
+                ]);
+            }
+
             $rows = validate_songs_json($parsed);
             backup_database($db, 'db');
             $count = import_songs($db, $rows);
             json_out(['ok' => true, 'count' => $count]);
-        }
-        if ($segments[1] === 'tracks') {
-            fail(410, 'tracks.json nebeimportuojamas. Įrašų tipai automatiškai indeksuojami iš files/audio aplankų.');
         }
     } catch (InvalidArgumentException $e) {
         fail(400, $e->getMessage());

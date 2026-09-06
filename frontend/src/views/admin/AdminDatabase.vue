@@ -2,21 +2,20 @@
     <div>
         <h2>Atsisiųsti</h2>
         <div class="adm-toolbar">
-            <a :href="dbUrl" target="_blank" rel="noopener">
-                <button class="adm-button adm-button--ghost">db.json (giesmės)</button>
-            </a>
-            <a :href="tracksUrl" target="_blank" rel="noopener">
-                <button class="adm-button adm-button--ghost">
-                    Įrašų indeksas (sugeneruotas iš aplankų)
-                </button>
-            </a>
+            <button class="adm-button" :disabled="busy" @click="exportDb">
+                Atsisiųsti visą duomenų bazę
+            </button>
         </div>
-
-        <h2>Įkelti giesmių duomenis</h2>
         <p class="adm-file-note">
-            Čia importuojami tik giesmių tekstai iš db.json. Audio kategorijos,
-            ikonos ir giesmių priskyrimai automatiškai nustatomi pagal
-            <b>server/files/audio/</b> aplankų struktūrą; details.json nebereikalingas.
+            Faile bus giesmių tekstai, skaidrių išdėstymas, įrašų kategorijos ir
+            jų priskyrimai giesmėms. MP3 ir natų failai į JSON neįtraukiami.
+        </p>
+
+        <h2>Atkurti duomenų bazę</h2>
+        <p class="adm-file-note">
+            Galima įkelti šio puslapio atsisiųstą pilną atsarginę kopiją arba seną
+            giesmių masyvą. Pilna kopija atkuria tekstus, skaidres, kategorijas
+            ir priskyrimus; fiziniai garso bei natų failai turi likti serveryje.
         </p>
 
         <div class="adm-status-slot" aria-live="polite">
@@ -32,7 +31,7 @@
                 @change="dbFile = pick($event)"
             />
             <button class="adm-button" :disabled="!dbFile || busy" @click="importDb">
-                Įkelti db.json
+                Įkelti JSON atsarginę kopiją
             </button>
         </div>
 
@@ -59,7 +58,6 @@
 
 <script>
 import { api } from '../../lib/api';
-import { config } from '../../lib/config';
 
 export default {
     name: 'AdminDatabase',
@@ -70,8 +68,6 @@ export default {
             busy: false,
             error: '',
             message: '',
-            dbUrl: config.dbUrl,
-            tracksUrl: config.tracksUrl,
         };
     },
     created() {
@@ -95,6 +91,19 @@ export default {
                 console.error(error);
             }
         },
+        async exportDb() {
+            this.busy = true;
+            this.error = '';
+            this.message = '';
+            try {
+                await api.exportDatabase();
+                this.message = 'Visa duomenų bazė atsisiųsta.';
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.busy = false;
+            }
+        },
         async importDb() {
             if (!window.confirm('Pakeisti VISĄ giesmių duomenų bazę įkeltu failu?')) {
                 return;
@@ -103,7 +112,10 @@ export default {
             this.error = '';
             try {
                 const result = await api.importDb(this.dbFile);
-                this.message = `Duomenų bazė pakeista (${result.count} giesmių). Programėlėje paspauskite „Atnaujinti duomenis“.`;
+                const details = result.format === 'edeno-aidai-database'
+                    ? `, ${result.trackTypes} įrašų kategorijų`
+                    : '';
+                this.message = `Duomenų bazė pakeista (${result.count} giesmių${details}). Programėlėje paspauskite „Atnaujinti duomenis“.`;
                 this.dbFile = null;
                 await this.loadBackups();
             } catch (error) {
