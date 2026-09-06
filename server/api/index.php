@@ -17,7 +17,6 @@ set_exception_handler(function (Throwable $e): void {
 require_once __DIR__ . '/lib/common.php';
 require_once __DIR__ . '/lib/import.php';
 require_once __DIR__ . '/lib/github.php';
-require_once __DIR__ . '/lib/media.php';
 
 // ─── Maršruto išskaidymas ────────────────────────────────────────────
 
@@ -163,6 +162,7 @@ if ($first === 'update' && $method === 'POST' && count($segments) === 1) {
 // GET /api/media/options
 if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segments[1] === 'options') {
     try {
+        require_once __DIR__ . '/lib/media.php';
         json_out(media_options(pdo()));
     } catch (Throwable $e) {
         fail(500, $e->getMessage());
@@ -173,6 +173,7 @@ if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segmen
 // GET /api/media/export?kind=notes&formats=svg,jpg
 if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segments[1] === 'export') {
     try {
+        require_once __DIR__ . '/lib/media.php';
         $kind = media_kind($_GET['kind'] ?? '');
         $allowed = media_allowed_values(pdo(), $kind);
         $selection = media_selection(
@@ -192,6 +193,7 @@ if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segmen
 // POST /api/media/import?kind=notes&formats=svg,jpg
 if ($first === 'media' && $method === 'POST' && count($segments) === 2 && $segments[1] === 'import') {
     try {
+        require_once __DIR__ . '/lib/media.php';
         $kind = media_kind($_GET['kind'] ?? '');
         $db = pdo();
         $allowed = media_allowed_values($db, $kind);
@@ -444,4 +446,183 @@ if ($first === 'tracks') {
             try {
                 $db->beginTransaction();
                 $db->prepare(
-                    'UPDATE track_types SET name 
+                    'UPDATE track_types SET name = ?, label = ? WHERE name = ?',
+                )->execute([$newName, $label, $name]);
+                $db->commit();
+            } catch (Throwable $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                if ($renamed) {
+                    @rename($newFolder, $oldFolder);
+                }
+                throw $e;
+            }
+
+            sync_audio_library($db, true);
+            $statement = $db->prepare('SELECT * FROM track_types WHERE name = ?');
+            $statement->execute([$newName]);
+            json_out(track_to_api($db, $statement->fetch()));
+        }
+
+        // DELETE /api/tracks/{name}
+        if (count($segments) === 2 && $method === 'DELETE') {
+            $folder = audio_dir() . "/$name";
+            if (!is_dir($folder)) {
+                fail(404, 'Audio kategorijos aplankas nerastas');
+            }
+            foreach (scandir($folder) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                $path = $folder . '/' . $entry;
+                if (is_file($path) && strtolower(pathinfo($entry, PATHINFO_EXTENSION)) === 'mp3') {
+                    fail(409, 'Kategorijoje dar yra MP3 failų. Pirmiausia juos pašalinkite.');
+                }
+            }
+            foreach (scandir($folder) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                $path = $folder . '/' . $entry;
+                if (is_file($path)) {
+                    @unlink($path);
+                }
+            }
+            if (!@rmdir($folder)) {
+                fail(500, 'Nepavyko pašalinti kategorijos aplanko');
+            }
+            sync_audio_library($db, true);
+            json_out(['ok' => true]);
+        }
+
+        // POST /api/tracks/{name}/icon – ikona laikoma pačiame kategorijos aplanke
+        if (count($segments) === 3 && $segments[2] === 'icon' && $method === 'POST') {
+            $folder = audio_dir() . "/$name";
+            if (!is_dir($folder)) {
+                fail(404, 'Audio kategorijos aplankas nerastas');
+            }
+            $file = uploaded_file(2 * 1024 * 1024);
+            $extension = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+            if (!in_array($extension, TRACK_ICON_EXTENSIONS, true)) {
+                fail(400, 'Ikona turi būti SVG, PNG, WEBP arba JPG failas');
+            }
+            foreach (TRACK_ICON_EXTENSIONS as $oldExtension) {
+                @unlink($folder . "/icon.$oldExtension");
+            }
+            $fileName = "icon.$extension";
+            save_upload($file, $folder . '/' . $fileName);
+            sync_audio_library($db, true);
+            $statement = $db->prepare('SELECT * FROM track_types WHERE name = ?');
+            $statement->execute([$name]);
+            json_out(track_to_api($db, $statement->fetch()));
+        }
+    }
+}
+
+// ─── Audio ir natų failai ────────────────────────────────────────────
+
+if ($first === 'files' && count($segments) === 4) {
+    $db = pdo();
+
+    // /api/files/audio/{type}/{songId}
+    if ($segments[1] === 'audio') {
+        $type = assert_type($segments[2]);
+        $songId = assert_song_id($segments[3]);
+        $target = files_dir() . "/audio/$type/$songId.mp3";
+
+        if ($method === 'POST') {
+            $statement = $db->prepare('SELECT 1 FROM track_types WHERE name = ?');
+            $statement->execute([$type]);
+            if (!$statement->fetchColumn()) {
+                fail(400, 'Nežinomas įrašo tipas');
+            }
+            $file = uploaded_file(40 * 1024 * 1024);
+            if (!has_extension($file, ['.mp3'], ['mpeg', 'mp3'])) {
+                fail(400, 'Audio failas turi būti MP3');
+            }
+            save_upload($file, $target);
+            sync_audio_library($db, true);
+            json_out(['ok' => true, 'file' => "audio/$type/$songId.mp3"]);
+        }
+
+        if ($method === 'DELETE') {
+            if (!is_file($target)) {
+                fail(404, 'Failas nerastas');
+            }
+            unlink($target);
+            sync_audio_library($db, true);
+            json_out(['ok' => true]);
+        }
+    }
+
+    // /api/files/notes/{format}/{songId}?page=N
+    if ($segments[1] === 'notes') {
+        $format = assert_format($segments[2]);
+        $songId = assert_song_id($segments[3]);
+        $page = assert_page($_GET['page'] ?? 0);
+        $target = files_dir() . "/notes/$format/" . notes_file_name($songId, $page, $format);
+
+        if ($method === 'POST') {
+            $file = uploaded_file(15 * 1024 * 1024);
+            $valid = $format === 'svg'
+                ? has_extension($file, ['.svg'], ['svg'])
+                : has_extension($file, ['.jpg', '.jpeg'], ['jpeg']);
+            if (!$valid) {
+                fail(400, $format === 'svg' ? 'Failas turi būti SVG' : 'Failas turi būti JPG');
+            }
+            save_upload($file, $target);
+            json_out(['ok' => true, 'file' => "notes/$format/" . notes_file_name($songId, $page, $format)]);
+        }
+
+        if ($method === 'DELETE') {
+            if (!is_file($target)) {
+                fail(404, 'Failas nerastas');
+            }
+            unlink($target);
+            json_out(['ok' => true]);
+        }
+    }
+}
+
+// ─── Viso failo importas / atsarginės kopijos ────────────────────────
+
+if ($first === 'import' && count($segments) === 2 && $method === 'POST') {
+    $db = pdo();
+    $file = uploaded_file(20 * 1024 * 1024);
+    $parsed = json_decode((string) file_get_contents($file['tmp_name']), true);
+    if ($parsed === null) {
+        fail(400, 'Failas nėra tinkamas JSON');
+    }
+
+    try {
+        if ($segments[1] === 'db') {
+            if (($parsed['format'] ?? '') === 'edeno-aidai-database') {
+                $export = validate_database_export($parsed);
+                backup_database($db, 'db');
+                $result = import_database($db, $export['songs'], $export['trackTypes']);
+                json_out([
+                    'ok' => true,
+                    'format' => 'edeno-aidai-database',
+                    'count' => $result['songs'],
+                    'trackTypes' => $result['trackTypes'],
+                ]);
+            }
+
+            $rows = validate_songs_json($parsed);
+            backup_database($db, 'db');
+            $count = import_songs($db, $rows);
+            json_out(['ok' => true, 'count' => $count]);
+        }
+    } catch (InvalidArgumentException $e) {
+        fail(400, $e->getMessage());
+    }
+}
+
+// GET /api/backups
+if ($first === 'backups' && $method === 'GET') {
+    json_out(list_backups());
+}
+
+fail(404, 'Nerasta');
+
