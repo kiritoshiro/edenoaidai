@@ -83,6 +83,10 @@ function json_out(mixed $data, int $code = 200): never
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    header('CDN-Cache-Control: no-store');
+    header('Cloudflare-CDN-Cache-Control: no-store');
+    header('Pragma: no-cache');
+    header('Expires: 0');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -700,3 +704,4 @@ function build_database_export(PDO $db): array
         'trackTypes' => $trackTypes,
     ];
 }
+
