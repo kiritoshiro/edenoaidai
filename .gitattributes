@@ -1,0 +1,16 @@
+# Normalize line endings so the same file hashes identically whether it was
+# committed from Windows or Linux/CI — without this, byte-comparison checks
+# (e.g. "does the committed server/ match a fresh build?") fail spuriously on
+# line-ending differences alone, not real content changes.
+* text=auto eol=lf
+
+# Binary assets: never touch line endings, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.mp3 binary
+*.svg -text
+*.woff binary
+*.woff2 binary
+*.zip binary
