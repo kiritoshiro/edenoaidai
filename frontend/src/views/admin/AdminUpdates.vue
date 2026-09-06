@@ -55,6 +55,118 @@
             MP3/natų failai ir <b>storage/</b>. Po sėkmingo atnaujinimo išvalykite
             naršyklės PWA duomenis tik tada, jei programėlė nerodo naujos versijos.
         </p>
+
+        <h2>Audio ir natų failų atsarginės kopijos</h2>
+        <p class="adm-file-note">
+            Archyvuose išsaugoma aplankų struktūra: <b>audio/&lt;tipas&gt;/</b>
+            ir <b>notes/&lt;formatas&gt;/</b>. Įkeliant atkuriami tik pažymėti
+            tipai arba formatai; kiti archyvo failai paliekami nepakeisti.
+        </p>
+
+        <div class="adm-media-grid">
+            <section class="adm-media-card">
+                <h3>Muzikos failai (MP3)</h3>
+                <p class="adm-media-help">Pasirinkite įrašų tipus, kuriuos norite atsisiųsti arba įkelti.</p>
+                <div class="adm-selection-actions">
+                    <button type="button" class="adm-button adm-button--ghost" :disabled="mediaBusy" @click="selectAll('audio')">
+                        Pažymėti visus
+                    </button>
+                    <button type="button" class="adm-button adm-button--ghost" :disabled="mediaBusy" @click="clearSelection('audio')">
+                        Atžymėti visus
+                    </button>
+                </div>
+                <div v-if="mediaLoading" class="adm-muted">Kraunami audio tipai…</div>
+                <div v-else-if="!audioTypes.length" class="adm-muted">Audio tipų nerasta.</div>
+                <div v-else class="adm-media-options">
+                    <label v-for="item in audioTypes" :key="item.name" class="adm-media-option">
+                        <input v-model="selectedAudioTypes" type="checkbox" :value="item.name" :disabled="mediaBusy" />
+                        <span>
+                            <b>{{ item.label }}</b>
+                            <small>{{ item.name }} · {{ item.count }} fail.</small>
+                        </span>
+                    </label>
+                </div>
+                <div class="adm-toolbar">
+                    <button
+                        type="button"
+                        class="adm-button"
+                        :disabled="!selectedAudioTypes.length || mediaBusy || mediaLoading"
+                        @click="downloadMedia('audio')"
+                    >
+                        {{ mediaBusy && mediaAction === 'download-audio' ? 'Kuriamas archyvas…' : 'Atsisiųsti MP3 ZIP' }}
+                    </button>
+                </div>
+                <div class="adm-toolbar">
+                    <input
+                        ref="audioFileInput"
+                        class="adm-input"
+                        type="file"
+                        accept=".zip,application/zip"
+                        :disabled="mediaBusy"
+                        @change="audioArchiveFile = pick($event)"
+                    />
+                    <button
+                        type="button"
+                        class="adm-button adm-button--ghost"
+                        :disabled="!audioArchiveFile || !selectedAudioTypes.length || mediaBusy || mediaLoading"
+                        @click="uploadMedia('audio')"
+                    >
+                        Įkelti MP3 ZIP
+                    </button>
+                </div>
+            </section>
+
+            <section class="adm-media-card">
+                <h3>Natų failai</h3>
+                <p class="adm-media-help">Pasirinkite natų failų formatus, kuriuos norite atsisiųsti arba įkelti.</p>
+                <div class="adm-selection-actions">
+                    <button type="button" class="adm-button adm-button--ghost" :disabled="mediaBusy" @click="selectAll('notes')">
+                        Pažymėti visus
+                    </button>
+                    <button type="button" class="adm-button adm-button--ghost" :disabled="mediaBusy" @click="clearSelection('notes')">
+                        Atžymėti visus
+                    </button>
+                </div>
+                <div v-if="mediaLoading" class="adm-muted">Kraunami natų formatai…</div>
+                <div v-else class="adm-media-options">
+                    <label v-for="item in noteFormats" :key="item.name" class="adm-media-option">
+                        <input v-model="selectedNoteFormats" type="checkbox" :value="item.name" :disabled="mediaBusy" />
+                        <span>
+                            <b>{{ item.label }}</b>
+                            <small>{{ item.name }} · {{ item.count }} fail.</small>
+                        </span>
+                    </label>
+                </div>
+                <div class="adm-toolbar">
+                    <button
+                        type="button"
+                        class="adm-button"
+                        :disabled="!selectedNoteFormats.length || mediaBusy || mediaLoading"
+                        @click="downloadMedia('notes')"
+                    >
+                        {{ mediaBusy && mediaAction === 'download-notes' ? 'Kuriamas archyvas…' : 'Atsisiųsti natų ZIP' }}
+                    </button>
+                </div>
+                <div class="adm-toolbar">
+                    <input
+                        ref="notesFileInput"
+                        class="adm-input"
+                        type="file"
+                        accept=".zip,application/zip"
+                        :disabled="mediaBusy"
+                        @change="notesArchiveFile = pick($event)"
+                    />
+                    <button
+                        type="button"
+                        class="adm-button adm-button--ghost"
+                        :disabled="!notesArchiveFile || !selectedNoteFormats.length || mediaBusy || mediaLoading"
+                        @click="uploadMedia('notes')"
+                    >
+                        Įkelti natų ZIP
+                    </button>
+                </div>
+            </section>
+        </div>
     </div>
 </template>
 
@@ -73,12 +185,22 @@ export default {
             branch: 'v2',
             loading: false,
             busy: false,
+            mediaLoading: false,
+            mediaBusy: false,
+            mediaAction: '',
+            audioTypes: [],
+            noteFormats: [],
+            selectedAudioTypes: [],
+            selectedNoteFormats: [],
+            audioArchiveFile: null,
+            notesArchiveFile: null,
             error: '',
             message: '',
         };
     },
     created() {
         this.loadVersions();
+        this.loadMediaOptions();
     },
     methods: {
         async loadVersions() {
@@ -129,6 +251,89 @@ export default {
                 this.busy = false;
             }
         },
+        async loadMediaOptions() {
+            this.mediaLoading = true;
+            this.error = '';
+            try {
+                const result = await api.mediaOptions();
+                this.audioTypes = result.audio || [];
+                this.noteFormats = result.notes || [];
+                this.selectedAudioTypes = this.audioTypes.map(item => item.name);
+                this.selectedNoteFormats = this.noteFormats.map(item => item.name);
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.mediaLoading = false;
+            }
+        },
+        selectAll(kind) {
+            if (kind === 'audio') {
+                this.selectedAudioTypes = this.audioTypes.map(item => item.name);
+            } else {
+                this.selectedNoteFormats = this.noteFormats.map(item => item.name);
+            }
+        },
+        clearSelection(kind) {
+            if (kind === 'audio') {
+                this.selectedAudioTypes = [];
+            } else {
+                this.selectedNoteFormats = [];
+            }
+        },
+        async downloadMedia(kind) {
+            const selection = kind === 'audio' ? this.selectedAudioTypes : this.selectedNoteFormats;
+            if (!selection.length) return;
+            this.mediaBusy = true;
+            this.mediaAction = `download-${kind}`;
+            this.error = '';
+            this.message = '';
+            try {
+                await api.downloadMedia(kind, selection);
+                this.message = kind === 'audio'
+                    ? 'MP3 archyvas paruoštas.'
+                    : 'Natų archyvas paruoštas.';
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.mediaBusy = false;
+                this.mediaAction = '';
+            }
+        },
+        async uploadMedia(kind) {
+            const isAudio = kind === 'audio';
+            const selection = isAudio ? this.selectedAudioTypes : this.selectedNoteFormats;
+            const file = isAudio ? this.audioArchiveFile : this.notesArchiveFile;
+            if (!file || !selection.length) return;
+            if (!window.confirm(
+                isAudio
+                    ? 'Įkelti archyvą ir pakeisti pažymėtus MP3 failus?'
+                    : 'Įkelti archyvą ir pakeisti pažymėtus natų failus?',
+            )) {
+                return;
+            }
+            this.mediaBusy = true;
+            this.mediaAction = `upload-${kind}`;
+            this.error = '';
+            this.message = '';
+            try {
+                const result = await api.importMedia(kind, selection, file);
+                const skipped = result.skipped ? ` Praleista: ${result.skipped}.` : '';
+                this.message = `Atkurta failų: ${result.imported || 0}.${skipped}`;
+                if (isAudio) {
+                    this.audioArchiveFile = null;
+                    if (this.$refs.audioFileInput) this.$refs.audioFileInput.value = '';
+                } else {
+                    this.notesArchiveFile = null;
+                    if (this.$refs.notesFileInput) this.$refs.notesFileInput.value = '';
+                }
+                await this.loadMediaOptions();
+            } catch (error) {
+                this.error = error.message;
+            } finally {
+                this.mediaBusy = false;
+                this.mediaAction = '';
+            }
+        },
     },
     watch: {
         source() {
@@ -175,4 +380,22 @@ export default {
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
 }
-</style>
+
+.adm-media-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.adm-media-card {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--adm-border);
+    border-radius: 10px;
+    background: var(--adm-surface);
+
+    h3 {
+        margin: 0 0 6px;
+        font-size: 17px;
+    }
+

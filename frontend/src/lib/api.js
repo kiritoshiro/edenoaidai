@@ -33,6 +33,42 @@ async function request(path, { method = 'GET', body } = {}) {
 
 const id = value => encodeURIComponent(value);
 
+async function downloadResponse(path, fallbackFilename) {
+    const response = await fetch(`${config.apiUrl}${path}`, {
+        credentials: 'include',
+    });
+
+    if (!response.ok) {
+        let message = `Klaida (${response.status})`;
+        try {
+            const data = await response.json();
+            if (data && data.error) message = data.error;
+        } catch {
+            /* not JSON */
+        }
+        throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filename =
+        disposition.match(/filename="([^"]+)"/i)?.[1] || fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function mediaQuery(kind, values) {
+    const query = new URLSearchParams({ kind });
+    query.set(kind === 'audio' ? 'types' : 'formats', values.join(','));
+    return query.toString();
+}
+
 export const api = {
     login: password => request('/api/login', { method: 'POST', body: { password } }),
     logout: () => request('/api/logout', { method: 'POST' }),
@@ -120,5 +156,19 @@ export const api = {
     githubReleases: () => request('/api/github/releases'),
     updateFromGithub: (source, ref) =>
         request('/api/update', { method: 'POST', body: { source, ref } }),
+    mediaOptions: () => request('/api/media/options'),
+    downloadMedia: (kind, values) =>
+        downloadResponse(
+            `/api/media/export?${mediaQuery(kind, values)}`,
+            `edeno-aidai-${kind}.zip`,
+        ),
+    importMedia: (kind, values, file) => {
+        const form = new FormData();
+        form.append('file', file);
+        return request(`/api/media/import?${mediaQuery(kind, values)}`, {
+            method: 'POST',
+            body: form,
+        });
+    },
     backups: () => request('/api/backups'),
 };
