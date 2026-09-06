@@ -82,6 +82,11 @@ const router = createRouter({
                     name: 'admin-database',
                     component: () => import('../views/admin/AdminDatabase.vue'),
                 },
+                {
+                    path: 'updates',
+                    name: 'admin-updates',
+                    component: () => import('../views/admin/AdminUpdates.vue'),
+                },
             ],
         },
         { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFound },

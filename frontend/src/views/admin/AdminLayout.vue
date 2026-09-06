@@ -12,6 +12,9 @@
                 <router-link :to="{ name: 'admin-database' }" class="adm-nav__link">
                     Duomenų bazė
                 </router-link>
+                <router-link :to="{ name: 'admin-updates' }" class="adm-nav__link">
+                    Atnaujinimas
+                </router-link>
                 <a href="/" class="adm-nav__link">Giesmynas ↗</a>
                 <button class="adm-nav__theme" @click="toggleTheme">
                     <span aria-hidden="true">{{ isDark ? '☀' : '☾' }}</span>

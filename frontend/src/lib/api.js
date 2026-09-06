@@ -116,5 +116,9 @@ export const api = {
         link.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
+    githubCommits: () => request('/api/github/commits'),
+    githubReleases: () => request('/api/github/releases'),
+    updateFromGithub: (source, ref) =>
+        request('/api/update', { method: 'POST', body: { source, ref } }),
     backups: () => request('/api/backups'),
 };

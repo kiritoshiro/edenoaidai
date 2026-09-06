@@ -16,6 +16,7 @@ set_exception_handler(function (Throwable $e): void {
 
 require_once __DIR__ . '/lib/common.php';
 require_once __DIR__ . '/lib/import.php';
+require_once __DIR__ . '/lib/github.php';
 
 // ─── Maršruto išskaidymas ────────────────────────────────────────────
 
@@ -119,6 +120,43 @@ if ($first === 'export' && $method === 'GET' && count($segments) === 2 && $segme
         build_database_export($db),
         'edeno-aidai-database-' . gmdate('Y-m-d-His') . '.json',
     );
+}
+
+// GET /api/github/commits | /api/github/releases
+if ($first === 'github' && $method === 'GET' && count($segments) === 2) {
+    try {
+        if ($segments[1] === 'commits') {
+            json_out([
+                'repository' => github_settings()['owner'] . '/' . github_settings()['repo'],
+                'branch' => github_settings()['branch'],
+                'items' => github_commits(),
+            ]);
+        }
+        if ($segments[1] === 'releases') {
+            json_out([
+                'repository' => github_settings()['owner'] . '/' . github_settings()['repo'],
+                'branch' => github_settings()['branch'],
+                'items' => github_releases(),
+            ]);
+        }
+    } catch (Throwable $e) {
+        fail(502, $e->getMessage());
+    }
+}
+
+// POST /api/update – update to a selected commit or release.
+if ($first === 'update' && $method === 'POST' && count($segments) === 1) {
+    $body = read_json_body();
+    try {
+        json_out(github_update(
+            trim((string) ($body['source'] ?? '')),
+            trim((string) ($body['ref'] ?? '')),
+        ));
+    } catch (InvalidArgumentException $e) {
+        fail(400, $e->getMessage());
+    } catch (Throwable $e) {
+        fail(502, $e->getMessage());
+    }
 }
 
 // POST /api/login

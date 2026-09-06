@@ -15,7 +15,8 @@ is needed only to build the frontend; it is not required on the server.
 ## Server requirements
 
 - Nginx
-- PHP 8.1 or newer with PHP-FPM and the `pdo_mysql`, `mbstring`, and `fileinfo`
+- PHP 8.1 or newer with PHP-FPM and the `pdo_mysql`, `mbstring`, `fileinfo`,
+  `curl`, and `zip`
   extensions
 - MySQL or MariaDB
 - HTTPS
@@ -24,7 +25,7 @@ is needed only to build the frontend; it is not required on the server.
 On Ubuntu with PHP 8.4, the required extensions can be installed with:
 
 ```bash
-sudo apt install php8.4-fpm php8.4-mysql php8.4-mbstring
+sudo apt install php8.4-fpm php8.4-mysql php8.4-mbstring php8.4-curl php8.4-zip
 ```
 
 ## Nginx deployment
@@ -243,6 +244,17 @@ npm run release
 The release command builds the frontend and synchronizes it into `server/`.
 Upload the changed `server/` contents to the Nginx document root. Preserve the
 server's `api/config.php`, `files/`, and `storage/` data.
+
+## Updating from GitHub
+
+The administrator can open `Admin -> Atnaujinimas`, check the configured
+`v2` branch, and choose either a commit or a release. The server downloads that
+version's `server/` directory and updates the application files while keeping
+`api/config.php`, the database, `files/`, and `storage/` untouched.
+
+For a private repository or higher GitHub API limits, set `github_token` in the
+server-only `api/config.php`. The repository defaults are `kiritoshiro/edenoaidai`
+and branch `v2`; they can also be overridden there.
 
 ## Security and backups
 
