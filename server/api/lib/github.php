@@ -251,6 +251,13 @@ function github_update(string $source, string $ref): array
                 unlink($obsolete);
             }
         }
+        // Record exactly what was just applied. This is the authoritative
+        // source for "which version is running" – unlike version.json
+        // (written at build time, so it can only ever name the *parent* of
+        // whatever commit it ships in) this is written after the fact, so it
+        // names the real deployed ref with no lag.
+        record_applied_version($source, $ref);
+
         return ['source' => $source, 'ref' => $ref];
     } finally {
         github_remove_tree($work);

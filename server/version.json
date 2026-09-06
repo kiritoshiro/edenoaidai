@@ -1,9 +1,9 @@
 {
-  "sha": "2a5b9bb7b80987706910546836b97a2972ae4b1f",
-  "shortSha": "2a5b9bb",
+  "sha": "604eabfd7ba16a3ac9f67134928832bf7482a9c2",
+  "shortSha": "604eabf",
   "branch": "v2",
-  "message": "Merge remote-tracking branch 'origin/v2' into v2",
-  "date": "2026-09-06T16:49:58+03:00",
+  "message": "Move media library to Duomenų bazė with per-file browse/select/upload",
+  "date": "2026-09-06T18:28:25+03:00",
   "dirty": true,
-  "builtAt": "2026-09-06T15:27:22.257Z"
+  "builtAt": "2026-09-06T18:15:52.386Z"
 }

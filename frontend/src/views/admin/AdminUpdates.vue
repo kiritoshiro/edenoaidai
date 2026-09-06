@@ -5,25 +5,31 @@
         <div class="adm-current-version">
             <h3 class="adm-subheading">Dabartinė versija</h3>
             <p v-if="versionLoading" class="adm-muted">Tikrinama…</p>
-            <template v-else-if="current">
+            <template v-else-if="current && current.source === 'self-update'">
                 <p class="adm-current-version__line">
-                    <b>{{ current.shortSha }}</b> · {{ firstLine(current.message) }}
-                    <span v-if="current.dirty" class="adm-pill adm-pill--warn">
-                        su vietiniais pakeitimais
+                    <b v-if="currentCommitInfo">
+                        {{ currentCommitInfo.shortSha }} · {{ firstLine(currentCommitInfo.message) }}
+                    </b>
+                    <b v-else>{{ current.ref }}</b>
+                    <span v-if="current.updateSource === 'release'" class="adm-pill adm-pill--current">
+                        release
                     </span>
                 </p>
                 <small class="adm-muted">
-                    {{ current.branch }} · {{ formatDate(current.date) }}
-                    <template v-if="current.builtAt">
-                        · sukurta {{ formatDate(current.builtAt) }}
-                    </template>
+                    Atnaujinta per šį skydelį {{ formatDate(current.appliedAt) }}
                 </small>
             </template>
-            <p v-else class="adm-muted">
-                Versija nežinoma – serveryje nėra <code>version.json</code>
-                (įdiegta rankiniu būdu su senesniu build.mjs arba failas
-                pašalintas).
-            </p>
+            <template v-else-if="current">
+                <p class="adm-current-version__line">
+                    <b>{{ current.shortSha }}</b> · {{ firstLine(current.message) }}
+                </p>
+                <small class="adm-muted">
+                    {{ current.branch }} · {{ formatDate(current.date) }}
+                    · apytikslė reikšmė (rodomas ankstesnis commit’as, nes
+                    serveryje įdiegta rankiniu būdu, ne per šį skydelį)
+                </small>
+            </template>
+            <p v-else class="adm-muted">Versija nežinoma.</p>
         </div>
 
         <p class="adm-file-note">
@@ -50,6 +56,9 @@
                 <input v-model="selectedRef" type="radio" name="github-version" :value="item.tag" />
                 <span>
                     <b>{{ item.name || item.tag }}</b>
+                    <span v-if="isCurrentRelease(item)" class="adm-pill adm-pill--current">
+                        dabartinė
+                    </span>
                     <small>{{ item.tag }} · {{ formatDate(item.date) }}{{ item.prerelease ? ' · prerelease' : '' }}</small>
                 </span>
             </label>
@@ -107,6 +116,18 @@ export default {
             message: '',
         };
     },
+    computed: {
+        // Only meaningful once the commit list has loaded – used to show the
+        // commit message/date next to a self-update record, which only
+        // stores the bare ref.
+        currentCommitInfo() {
+            if (!this.current || this.current.source !== 'self-update' || this.current.updateSource === 'release') {
+                return null;
+            }
+            const ref = this.current.ref;
+            return this.commits.find(item => item.sha === ref || item.sha.startsWith(ref)) || null;
+        },
+    },
     created() {
         // Independent of the GitHub check below, so it still shows something
         // useful even if GitHub is unreachable or rate-limited.
@@ -125,8 +146,24 @@ export default {
                 this.versionLoading = false;
             }
         },
+        // Badging which list entry is "current" is only reliable when we have
+        // an exact self-update record – the version.json fallback names the
+        // *parent* of whatever commit it ships in, so matching against it
+        // would badge the wrong entry.
         isCurrentCommit(item) {
-            return Boolean(this.current?.sha) && item.sha === this.current.sha;
+            if (!this.current || this.current.source !== 'self-update' || this.current.updateSource === 'release') {
+                return false;
+            }
+            const ref = this.current.ref;
+            return item.sha === ref || item.sha.startsWith(ref);
+        },
+        isCurrentRelease(item) {
+            return Boolean(
+                this.current &&
+                    this.current.source === 'self-update' &&
+                    this.current.updateSource === 'release' &&
+                    item.tag === this.current.ref,
+            );
         },
         async loadVersions() {
             this.loading = true;
@@ -232,12 +269,6 @@ export default {
     justify-self: start;
     color: var(--adm-accent-strong, #75480b);
     background: var(--adm-accent-soft, #f3e2c3);
-}
-
-.adm-pill--warn {
-    justify-self: start;
-    color: #a43b32;
-    background: rgba(178, 61, 49, 0.12);
 }
 
 .adm-sr-only {

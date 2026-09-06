@@ -1,5 +1,17 @@
 import { config } from './config';
 
+// The API always sends Cache-Control: no-store (plus CDN-Cache-Control and
+// Pragma for good measure), but the CDN in front of production has been
+// observed caching GET responses anyway — a zone-level cache/page rule can
+// override origin cache headers outright, and CDN-Cache-Control only
+// controls what *should* stop that, not what actually does. A unique query
+// parameter guarantees a fresh cache key every request regardless, the same
+// way Install.vue's own fetchJson already busts the CDN for the hymn
+// database itself.
+function bustCache(path) {
+    return path + (path.includes('?') ? '&' : '?') + `_=${Date.now()}`;
+}
+
 async function request(path, { method = 'GET', body } = {}) {
     const options = { method, credentials: 'include', headers: {} };
 
@@ -12,7 +24,8 @@ async function request(path, { method = 'GET', body } = {}) {
         }
     }
 
-    const response = await fetch(`${config.apiUrl}${path}`, options);
+    const url = method === 'GET' ? bustCache(path) : path;
+    const response = await fetch(`${config.apiUrl}${url}`, options);
 
     if (!response.ok) {
         let message = `Klaida (${response.status})`;
@@ -34,7 +47,7 @@ async function request(path, { method = 'GET', body } = {}) {
 const id = value => encodeURIComponent(value);
 
 async function downloadResponse(path, fallbackFilename) {
-    const response = await fetch(`${config.apiUrl}${path}`, {
+    const response = await fetch(`${config.apiUrl}${bustCache(path)}`, {
         credentials: 'include',
     });
 
@@ -156,7 +169,7 @@ export const api = {
         return request('/api/import/db', { method: 'POST', body: form });
     },
     exportDatabase: async () => {
-        const response = await fetch(`${config.apiUrl}/api/export/database`, {
+        const response = await fetch(`${config.apiUrl}${bustCache('/api/export/database')}`, {
             credentials: 'include',
         });
 

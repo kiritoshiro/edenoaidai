@@ -76,12 +76,58 @@ function audio_dir(): string
     return files_dir() . '/audio';
 }
 
-// Read the version.json that frontend/scripts/build.mjs writes next to
-// index.html. This reflects whatever build is actually deployed, regardless
-// of whether it got here via manual upload or the GitHub self-updater (which
-// copies it along with everything else in server/) — unlike tracking "the
-// last ref the updater applied", it can't go stale from a manual deploy.
+// What "current version" the admin panel shows, preferring the most
+// accurate source available:
+//
+// 1. storage/last-update.json, written by github_update() right after a
+//    successful self-update. This names the exact ref that was just
+//    applied, with no lag — the self-updater always knows precisely what
+//    it deployed.
+// 2. version.json, written by frontend/scripts/build.mjs at build time and
+//    shipped inside server/. This is only a fallback for a manually
+//    deployed build (e.g. an emergency fix uploaded by hand): because the
+//    build necessarily runs *before* the commit that will contain its own
+//    output exists, this can only ever name that commit's parent, never
+//    itself — callers should treat it as approximate, not exact.
 function deployed_version(): ?array
+{
+    return applied_version_record() ?? build_time_version();
+}
+
+function applied_version_record(): ?array
+{
+    $path = storage_dir() . '/last-update.json';
+    if (!is_file($path)) {
+        return null;
+    }
+    $data = json_decode((string) file_get_contents($path), true);
+    if (!is_array($data) || !isset($data['ref'])) {
+        return null;
+    }
+    return [
+        'source' => 'self-update',
+        'updateSource' => $data['source'] ?? null,
+        'ref' => (string) $data['ref'],
+        'appliedAt' => $data['appliedAt'] ?? null,
+    ];
+}
+
+function record_applied_version(string $source, string $ref): void
+{
+    $storage = storage_dir();
+    if (!is_dir($storage) && !mkdir($storage, 0775, true) && !is_dir($storage)) {
+        return; // Best-effort: a bad write here shouldn't fail the update itself.
+    }
+    file_put_contents(
+        $storage . '/last-update.json',
+        json_encode(
+            ['source' => $source, 'ref' => $ref, 'appliedAt' => gmdate(DATE_ATOM)],
+            JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT,
+        ),
+    );
+}
+
+function build_time_version(): ?array
 {
     $path = dirname(__DIR__, 2) . '/version.json';
     if (!is_file($path)) {
