@@ -18,8 +18,9 @@ Rules:
   in the database.
 - Use icon.svg, icon.png, icon.webp, icon.jpg, or icon.jpeg for the category icon.
 - If icon.* is absent, the first supported image in the category root is used.
-- details.json and tracks.json are no longer required.
-- The index refreshes when /api/public/tracks.json is requested and when an
-  administrator opens the song or recording-category pages.
+- details.json and tracks.json are no longer required or included.
+- The generated /api/public/tracks.json response refreshes the MySQL index when
+  requested, and the index also refreshes when an administrator opens the song
+  or recording-category pages.
 - Manual refresh from the server/ directory:
     php api/sync-audio.php

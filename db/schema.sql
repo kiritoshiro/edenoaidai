@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 -- server/files/audio/<kategorija>/<song_id>.mp3
 -- Kategorijos ikona: server/files/audio/<kategorija>/icon.svg (arba png/webp/jpg).
 
--- Pavyzdinės giesmės (pakeiskite importuodami tikrą db.json)
+-- Pavyzdinės giesmės (pakeiskite administravimo puslapyje įkeldami tikrą JSON)
 INSERT IGNORE INTO songs (song_id, title, verse, body, copyright) VALUES
-    ('1', 'PAVYZDYS – įkelkite tikrą duomenų bazę', '', 'Tai pavyzdinis įrašas.<br>Administravime (Duomenų bazė) įkelkite tikrą db.json failą.', ''),
+    ('1', 'PAVYZDYS – įkelkite tikrą duomenų bazę', '', 'Tai pavyzdinis įrašas.<br>Administravime (Duomenų bazė) įkelkite tikrą JSON failą.', ''),
     ('2', 'PAVYZDYS – antra giesmė', '', 'Antras pavyzdinis įrašas.', '');

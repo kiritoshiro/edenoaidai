@@ -3,6 +3,8 @@
 ## What changed
 
 - `details.json` is no longer the source of recording categories.
+- The old static database and recording-index JSON files were removed from the
+  repository.
 - Every direct `server/files/audio/<category>/` folder is indexed in MySQL.
 - Every `<songId>.mp3` file creates the matching `song_tracks` assignment.
 - The category icon is detected from `icon.svg`, `icon.png`, `icon.webp`,
@@ -15,6 +17,7 @@
 ## What is no longer required
 
 - Importing `details.json` or `tracks.json`.
+- Keeping a static `server/api/db.json` or `server/api/tracks.json` copy.
 - Manually assigning recording categories to each song.
 - Keeping category icons in `files/icons/`. The frontend still supports the
   legacy icon location for backward compatibility.

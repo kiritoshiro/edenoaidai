@@ -79,21 +79,33 @@ sudo apt install php8.4-fpm php8.4-mysql php8.4-mbstring
    public_html/storage/
    ```
 
-9. Test the home page, `/admin`, `/api`, `/api/public/db.json`,
-   `/api/public/tracks.json`, and `/manifest.json` over HTTPS.
+9. Test the home page, `/admin`, `/api`, the generated offline-data endpoints
+   `/api/public/db.json` and `/api/public/tracks.json`, and `/manifest.json`
+   over HTTPS.
 
 The Nginx configuration is required. Nginx does not read `.htaccess` files.
 The supplied template provides the PHP API front controller, Vue Router SPA
 fallback, private storage protection, PHP source protection, upload limits,
 and cache headers.
 
-## Importing songs
+## Importing and exporting the database
 
-Open `Admin -> Database` and import the old `db.json` song database. The old
-`details.json`/`tracks.json` import is no longer needed: recording categories
-and song assignments are indexed from the audio folder structure.
+Open `Admin -> Database` and choose `Atsisiųsti visą duomenų bazę` to download a
+JSON backup containing the hymn texts, structured lyric slides, recording
+categories, and song-to-category assignments. It does not contain passwords,
+login sessions, MP3 files, or sheet-music files.
 
-Database backups created before imports are stored under `server/storage/backups/`.
+The same full JSON file can be uploaded on the page to restore the content
+database. A legacy flat `db.json` song array is still accepted for migration,
+but it only imports hymn records. Recording categories and their assignments
+are normally indexed from the folders under `server/files/audio/`.
+
+The public `/api/public/db.json` and `/api/public/tracks.json` addresses are
+generated from MySQL at request time so the offline PWA can download a compact
+snapshot. The old static JSON source files are no longer part of the project.
+
+Database backups created automatically before imports or migrations are stored
+under `server/storage/backups/` in the same full-backup format.
 
 ## Lyrics columns and fullscreen slides
 
@@ -239,6 +251,7 @@ server's `api/config.php`, `files/`, and `storage/` data.
 - The administrator session uses an HTTP-only cookie and login attempts are
   rate-limited.
 - Back up the MySQL database with Virtualmin or `mysqldump`.
+- An administrator can also download a content backup from `Admin -> Database`.
 - Back up `public_html/files/` separately; media is intentionally excluded from
   this Git repository.
 - Keep the operating system, Nginx, PHP-FPM, and database server updated.
