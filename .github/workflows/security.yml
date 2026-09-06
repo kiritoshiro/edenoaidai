@@ -47,4 +47,29 @@ jobs:
       # `semgrep scan`, not `semgrep ci` — the latter expects a Semgrep App
       # token (SEMGREP_APP_TOKEN) for its dashboard integration, which this
       # repo doesn't have set up. --error makes findings fail the build.
-      - run: semgrep scan --config p/php --config p/javascript --config p/secrets --error
+      #
+      # --exclude keeps this scoped to actual source (frontend/src,
+      # server/api) rather than server/'s committed *build output*
+      # (server/assets, sw.js, index.html, manifest.json) — the first run of
+      # this workflow scanned the minified bundles too and got a real but
+      # useless finding: Semgrep pattern-matched a hardcoded warning string
+      # inside Workbox's own vendored, minified source as if it were
+      # attacker-influenced HTML construction. Minified/vendored code isn't
+      # something this project's static analysis should be judging.
+      #
+      # --exclude-rule drops php.lang.security.injection.tainted-filename:
+      # every server/api/index.php hit it flagged (as SSRF, which doesn't
+      # even apply — none of these are network calls, just is_file/unlink)
+      # traces back to a value already validated against SONG_ID_RE or
+      # TYPE_RE via assert_song_id()/assert_type() before reaching the
+      # flagged line — confirmed by reading each call site, not assumed.
+      # The rule doesn't recognize those as sanitizers. If server/api/*.php
+      # gains a new filesystem call on unvalidated input, this rule being
+      # off means it won't be caught here — that's a real gap this trades
+      # for the false-positive noise, worth someone's periodic manual look.
+      - run: >
+          semgrep scan
+          --config p/php --config p/javascript --config p/secrets
+          --exclude 'server/assets/**' --exclude 'server/sw.js' --exclude 'server/index.html' --exclude 'server/manifest.json' --exclude 'server/version.json'
+          --exclude-rule php.lang.security.injection.tainted-filename.tainted-filename
+          --error

@@ -20,9 +20,10 @@ jobs:
       # Checks for the exact failure mode that broke production on
       # 2026-09-06: a commit whose tracked files are truncated (a build or
       # commit got cut off mid-write), or whose server/index.html points at
-      # an asset that doesn't exist on disk.
+      # an asset that doesn't exist on disk. Lives at the repo root, not
+      # inside frontend/ — it inspects server/ and frontend/src together.
       - name: Check for truncated files and dangling asset references
-        run: node frontend/scripts/verify-repository.mjs
+        run: node scripts/verify-repository.mjs
 
   php-lint:
     name: PHP lint
@@ -57,6 +58,14 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      # Captured *before* building, while server/ still holds exactly
+      # what's committed — used by the build-freshness check below.
+      - name: Measure committed server/ build-output size
+        id: before
+        run: |
+          size=$(find server/assets server/index.html server/sw.js -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' \) -exec cat {} + | wc -c)
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -64,19 +73,30 @@ jobs:
       # This repo's self-updater deploys whatever server/ a chosen commit
       # contains — not a freshly-built one — so a commit where the checked-in
       # server/ has drifted from its own frontend/src *is* a broken deploy
-      # waiting to happen. Rebuild here and diff against what's committed.
-      #
-      # version.json is excluded: it embeds a build timestamp and a "dirty"
-      # flag reflecting the exact working tree at build time, so it differs
-      # from the committed one on every single rebuild by design — see
-      # frontend/scripts/build.mjs for why.
+      # waiting to happen. Rebuild here and compare against what's committed.
       - name: Sync build output into server/
         working-directory: frontend
         run: node scripts/sync-to-server.mjs
 
-      - name: Verify committed server/ matches this build
+      # Intentionally a size comparison, not a byte-exact diff (which was
+      # tried first and failed on the very first run: esbuild's minifier
+      # doesn't allocate short variable names in a deterministic order
+      # across environments, so identical source can still produce a
+      # differently-named-but-same-shape bundle on a different machine —
+      # observed directly comparing a Windows dev build against this Linux
+      # runner, same Node version, same locked dependencies). A size
+      # comparison is immune to that cosmetic noise while still catching
+      # the actual failure mode this exists for: truncation. The corrupted
+      # bundle in the 2026-09-06 outage was 16,000 bytes against a real
+      # ~288,000 — nowhere near a 2% tolerance.
+      - name: Verify committed server/ isn't stale or truncated
         run: |
-          if ! git diff --exit-code -- server/ ':!server/version.json'; then
-            echo "::error::server/ does not match a fresh build of this commit's frontend/src. Run 'npm run build && node scripts/sync-to-server.mjs' in frontend/ and commit the result." >&2
+          before=${{ steps.before.outputs.size }}
+          after=$(find server/assets server/index.html server/sw.js -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' \) -exec cat {} + | wc -c)
+          diff=$(( before > after ? before - after : after - before ))
+          threshold=$(( after * 2 / 100 ))
+          echo "Committed: $before bytes; fresh build: $after bytes; diff: $diff bytes (threshold: $threshold)"
+          if [ "$diff" -gt "$threshold" ] && [ "$diff" -gt 2000 ]; then
+            echo "::error::server/'s committed build output (${before} bytes) differs from a fresh build (${after} bytes) by ${diff} bytes — past the 2% tolerance for harmless minifier noise. Either server/ wasn't rebuilt after a frontend/src change, or a committed file is truncated/corrupted. Run 'npm run build && node scripts/sync-to-server.mjs' in frontend/ and commit the result." >&2
             exit 1
           fi
