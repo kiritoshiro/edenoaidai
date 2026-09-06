@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # No composer.json exists — the PHP backend has no dependencies to update.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # workbox-* packages are always used and bumped together; group them so
+      # one PR updates all of them instead of five separate ones.
+      workbox:
+        patterns:
+          - "workbox-*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

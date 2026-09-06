@@ -1,0 +1,50 @@
+name: Security
+
+on:
+  push:
+    branches: [v2]
+  pull_request:
+    branches: [v2]
+
+jobs:
+  secret-hygiene:
+    name: Secret hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # server/api/config.php holds the DB password, admin_password_hash, and
+      # the GitHub token the self-updater uses — it's gitignored on purpose.
+      # Fail hard if it's ever actually committed, present or future commit.
+      - name: config.php must never be committed
+        run: |
+          if git ls-files | grep -qx 'server/api/config.php'; then
+            echo "::error::server/api/config.php is tracked by git. It holds the DB password and admin password hash — remove it from the index (git rm --cached) and rotate every credential it contained." >&2
+            exit 1
+          fi
+
+      - name: Scan for GitHub token patterns anywhere in history-reachable files
+        run: |
+          if git grep -InE '(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,})' -- . ':!.github/workflows/security.yml'; then
+            echo "::error::A GitHub token-shaped string was found in a tracked file. Revoke it immediately at https://github.com/settings/tokens and remove it from the file." >&2
+            exit 1
+          fi
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  semgrep:
+    name: Semgrep (JS + PHP)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      # `semgrep scan`, not `semgrep ci` — the latter expects a Semgrep App
+      # token (SEMGREP_APP_TOKEN) for its dashboard integration, which this
+      # repo doesn't have set up. --error makes findings fail the build.
+      - run: semgrep scan --config p/php --config p/javascript --config p/secrets --error
