@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [v2]
+  pull_request:
+    branches: [v2]
+
+jobs:
+  repo-integrity:
+    name: Repository integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # Checks for the exact failure mode that broke production on
+      # 2026-09-06: a commit whose tracked files are truncated (a build or
+      # commit got cut off mid-write), or whose server/index.html points at
+      # an asset that doesn't exist on disk.
+      - name: Check for truncated files and dangling asset references
+        run: node frontend/scripts/verify-repository.mjs
+
+  php-lint:
+    name: PHP lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+
+      - name: php -l every file
+        run: find server/api -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+  frontend:
+    name: Frontend test, build, and build-freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # This repo's self-updater deploys whatever server/ a chosen commit
+      # contains — not a freshly-built one — so a commit where the checked-in
+      # server/ has drifted from its own frontend/src *is* a broken deploy
+      # waiting to happen. Rebuild here and diff against what's committed.
+      #
+      # version.json is excluded: it embeds a build timestamp and a "dirty"
+      # flag reflecting the exact working tree at build time, so it differs
+      # from the committed one on every single rebuild by design — see
+      # frontend/scripts/build.mjs for why.
+      - name: Sync build output into server/
+        working-directory: frontend
+        run: node scripts/sync-to-server.mjs
+
+      - name: Verify committed server/ matches this build
+        run: |
+          if ! git diff --exit-code -- server/ ':!server/version.json'; then
+            echo "::error::server/ does not match a fresh build of this commit's frontend/src. Run 'npm run build && node scripts/sync-to-server.mjs' in frontend/ and commit the result." >&2
+            exit 1
+          fi
