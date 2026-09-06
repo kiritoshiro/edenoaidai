@@ -224,6 +224,114 @@ function media_download_archive(string $kind, array $selected): never
     exit;
 }
 
+/** @return list<array{name: string, size: int}> */
+function media_list_files(string $kind, string $bucket): array
+{
+    if ($kind === 'audio') {
+        $folder = audio_category_directories()[$bucket] ?? null;
+        $extension = 'mp3';
+    } else {
+        $folder = files_dir() . '/notes/' . $bucket;
+        $extension = $bucket;
+    }
+
+    $files = [];
+    foreach (scandir($folder ?: '') ?: [] as $entry) {
+        $path = ($folder ?: '') . '/' . $entry;
+        if (!is_file($path) || strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== $extension) {
+            continue;
+        }
+        $files[] = ['name' => $entry, 'size' => filesize($path)];
+    }
+    usort($files, fn (array $a, array $b): int => strnatcasecmp($a['name'], $b['name']));
+
+    return $files;
+}
+
+/**
+ * Export an explicit list of individual files, mixing audio and notes freely,
+ * rather than a whole category/format at once.
+ *
+ * @param list<array{kind?: mixed, bucket?: mixed, file?: mixed}> $items
+ */
+function media_create_selection_archive(array $items): string
+{
+    if (!class_exists('ZipArchive')) {
+        throw new RuntimeException('Archyvams serveryje reikalingas PHP zip plėtinys');
+    }
+    if ($items === []) {
+        throw new InvalidArgumentException('Nepasirinktas nė vienas failas');
+    }
+    set_time_limit(300);
+
+    $archivePath = media_archive_path();
+    $zip = new ZipArchive();
+    if ($zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Nepavyko atidaryti laikino archyvo');
+    }
+
+    try {
+        $seen = [];
+        foreach ($items as $item) {
+            $kind = media_kind($item['kind'] ?? '');
+            $bucket = trim((string) ($item['bucket'] ?? ''));
+            $file = trim((string) ($item['file'] ?? ''));
+            if ($file === '' || basename($file) !== $file) {
+                throw new InvalidArgumentException('Netinkamas failo vardas pasirinkime');
+            }
+
+            if ($kind === 'audio') {
+                if (!preg_match(TYPE_RE, $bucket)) {
+                    throw new InvalidArgumentException('Nežinomas audio tipas pasirinkime');
+                }
+                $path = audio_dir() . "/$bucket/$file";
+            } else {
+                if (!in_array($bucket, FORMATS, true)) {
+                    throw new InvalidArgumentException('Nežinomas natų formatas pasirinkime');
+                }
+                $path = files_dir() . "/notes/$bucket/$file";
+            }
+            $archiveName = "$kind/$bucket/$file";
+            if (isset($seen[$archiveName])) {
+                continue;
+            }
+            $seen[$archiveName] = true;
+
+            if (!is_file($path)) {
+                throw new InvalidArgumentException("Failas nerastas: $file");
+            }
+            if (!$zip->addFile($path, $archiveName)) {
+                throw new RuntimeException('Nepavyko įtraukti failo į archyvą');
+            }
+        }
+        if (!$zip->close()) {
+            throw new RuntimeException('Nepavyko užbaigti archyvo');
+        }
+    } catch (Throwable $e) {
+        $zip->close();
+        @unlink($archivePath);
+        throw $e;
+    }
+
+    return $archivePath;
+}
+
+function media_download_selection(array $items): never
+{
+    $archivePath = media_create_selection_archive($items);
+    try {
+        $filename = 'edeno-aidai-failai-' . gmdate('Y-m-d-His') . '.zip';
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . (string) filesize($archivePath));
+        header('Cache-Control: no-store');
+        readfile($archivePath);
+    } finally {
+        @unlink($archivePath);
+    }
+    exit;
+}
+
 function media_safe_archive_parts(string $name): array
 {
     $name = str_replace('\\', '/', $name);

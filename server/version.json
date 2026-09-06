@@ -1,9 +1,9 @@
 {
-  "sha": "8aba61ec37c5cc42f197af1a06b1f7755c24e6e9",
-  "shortSha": "8aba61e",
+  "sha": "2a5b9bb7b80987706910546836b97a2972ae4b1f",
+  "shortSha": "2a5b9bb",
   "branch": "v2",
-  "message": "Fix truncated build corrupting the live app shell",
-  "date": "2026-09-06T16:15:10+03:00",
+  "message": "Merge remote-tracking branch 'origin/v2' into v2",
+  "date": "2026-09-06T16:49:58+03:00",
   "dirty": true,
-  "builtAt": "2026-09-06T13:48:12.956Z"
+  "builtAt": "2026-09-06T15:27:22.257Z"
 }

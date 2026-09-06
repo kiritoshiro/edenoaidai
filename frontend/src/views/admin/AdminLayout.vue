@@ -7,7 +7,7 @@
                     Giesmės
                 </router-link>
                 <router-link :to="{ name: 'admin-database' }" class="adm-nav__link">
-                    Kategorijos ir duomenų bazė
+                    Duomenų bazė
                 </router-link>
                 <router-link :to="{ name: 'admin-updates' }" class="adm-nav__link">
                     Atnaujinimas

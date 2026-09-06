@@ -196,6 +196,39 @@ if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segmen
     }
 }
 
+// GET /api/media/files?kind=audio&type=X | kind=notes&format=X
+if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segments[1] === 'files') {
+    try {
+        require_once __DIR__ . '/lib/media.php';
+        $kind = media_kind($_GET['kind'] ?? '');
+        $bucket = trim((string) ($_GET[$kind === 'audio' ? 'type' : 'format'] ?? ''));
+        if (!in_array($bucket, media_allowed_values(pdo(), $kind), true)) {
+            fail(400, $kind === 'audio' ? 'Nežinomas audio tipas' : 'Nežinomas natų formatas');
+        }
+        json_out(['files' => media_list_files($kind, $bucket)]);
+    } catch (InvalidArgumentException $e) {
+        fail(400, $e->getMessage());
+    } catch (Throwable $e) {
+        fail(500, $e->getMessage());
+    }
+}
+
+// POST /api/media/export-selection – body: { items: [{kind, bucket, file}, ...] }
+// Exports an explicit list of individual files (may mix audio and notes),
+// as opposed to /api/media/export which exports whole categories/formats.
+if ($first === 'media' && $method === 'POST' && count($segments) === 2 && $segments[1] === 'export-selection') {
+    try {
+        require_once __DIR__ . '/lib/media.php';
+        $body = read_json_body();
+        $items = is_array($body['items'] ?? null) ? $body['items'] : [];
+        media_download_selection($items);
+    } catch (InvalidArgumentException $e) {
+        fail(400, $e->getMessage());
+    } catch (Throwable $e) {
+        fail(500, $e->getMessage());
+    }
+}
+
 // POST /api/media/import?kind=audio&types=type1,type2
 // POST /api/media/import?kind=notes&formats=svg,jpg
 if ($first === 'media' && $method === 'POST' && count($segments) === 2 && $segments[1] === 'import') {

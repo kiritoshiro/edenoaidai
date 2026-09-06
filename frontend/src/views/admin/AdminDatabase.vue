@@ -102,6 +102,14 @@
             MP3 failo vardas turi sutapti su giesmės numeriu.
         </p>
 
+        <h2>Garso ir natų failai</h2>
+        <p class="adm-file-note">
+            Atsisiųskite atsargines kopijas pagal kategoriją/formatą, arba
+            išskleiskite kategoriją ir tvarkykite pavienius failus – pažymėkite
+            kelis atsisiuntimui, pašalinkite arba įkelkite naujus.
+        </p>
+        <MediaLibraryPanel />
+
         <h2>Duomenų bazė</h2>
         <h3 class="adm-subheading">Atsisiųsti</h3>
         <div class="adm-toolbar">
@@ -161,9 +169,13 @@
 <script>
 import { api } from '../../lib/api';
 import { config } from '../../lib/config';
+import MediaLibraryPanel from '../../components/admin/MediaLibraryPanel.vue';
 
 export default {
     name: 'AdminDatabase',
+    components: {
+        MediaLibraryPanel,
+    },
     data() {
         return {
             tracks: [],

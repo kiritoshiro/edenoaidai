@@ -69,6 +69,39 @@ function mediaQuery(kind, values) {
     return query.toString();
 }
 
+async function downloadPostResponse(path, body, fallbackFilename) {
+    const response = await fetch(`${config.apiUrl}${path}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        let message = `Klaida (${response.status})`;
+        try {
+            const data = await response.json();
+            if (data && data.error) message = data.error;
+        } catch {
+            /* not JSON */
+        }
+        throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filename =
+        disposition.match(/filename="([^"]+)"/i)?.[1] || fallbackFilename;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
     login: password => request('/api/login', { method: 'POST', body: { password } }),
     logout: () => request('/api/logout', { method: 'POST' }),
@@ -158,11 +191,17 @@ export const api = {
     updateFromGithub: (source, ref) =>
         request('/api/update', { method: 'POST', body: { source, ref } }),
     mediaOptions: () => request('/api/media/options'),
+    mediaFiles: (kind, bucket) =>
+        request(
+            `/api/media/files?kind=${id(kind)}&${kind === 'audio' ? 'type' : 'format'}=${id(bucket)}`,
+        ),
     downloadMedia: (kind, values) =>
         downloadResponse(
             `/api/media/export?${mediaQuery(kind, values)}`,
             `edeno-aidai-${kind}.zip`,
         ),
+    downloadMediaSelection: items =>
+        downloadPostResponse('/api/media/export-selection', { items }, 'edeno-aidai-failai.zip'),
     importMedia: (kind, values, file) => {
         const form = new FormData();
         form.append('file', file);
