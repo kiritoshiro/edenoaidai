@@ -74,8 +74,7 @@ const router = createRouter({
                 },
                 {
                     path: 'tracks',
-                    name: 'admin-tracks',
-                    component: () => import('../views/admin/AdminTracks.vue'),
+                    redirect: { name: 'admin-database' },
                 },
                 {
                     path: 'database',

@@ -6,11 +6,8 @@
                 <router-link :to="{ name: 'admin-songs' }" class="adm-nav__link">
                     Giesmės
                 </router-link>
-                <router-link :to="{ name: 'admin-tracks' }" class="adm-nav__link">
-                    Įrašų tipai
-                </router-link>
                 <router-link :to="{ name: 'admin-database' }" class="adm-nav__link">
-                    Duomenų bazė
+                    Kategorijos ir duomenų bazė
                 </router-link>
                 <router-link :to="{ name: 'admin-updates' }" class="adm-nav__link">
                     Atnaujinimas

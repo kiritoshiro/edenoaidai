@@ -415,27 +415,33 @@ if ($first === 'tracks') {
             if (!$row) {
                 fail(404, 'Tipas nerastas');
             }
-            if (isset($body['label']) && is_string($body['label'])) {
-                $label = trim($body['label']) !== '' ? trim($body['label']) : $name;
-                $db->prepare('UPDATE track_types SET label = ? WHERE name = ?')->execute([$label, $name]);
-                $row['label'] = $label;
-            }
-            json_out(track_to_api($db, $row));
-        }
 
-        // DELETE /api/tracks/{name}
-        if (count($segments) === 2 && $method === 'DELETE') {
-            $folder = audio_dir() . "/$name";
-            if (!is_dir($folder)) {
-                fail(404, 'Audio kategorijos aplankas nerastas');
+            $newName = $name;
+            if (isset($body['name']) && is_string($body['name'])) {
+                $newName = assert_type(trim($body['name']));
             }
-            foreach (scandir($folder) ?: [] as $entry) {
-                if ($entry === '.' || $entry === '..') {
-                    continue;
+            $label = isset($body['label']) && is_string($body['label'])
+                ? trim($body['label'])
+                : (string) $row['label'];
+            $label = $label !== '' ? $label : $newName;
+
+            $oldFolder = audio_dir() . "/$name";
+            $newFolder = audio_dir() . "/$newName";
+            $renamed = false;
+            if ($newName !== $name) {
+                if (!is_dir($oldFolder)) {
+                    fail(404, 'Senas audio kategorijos aplankas nerastas');
                 }
-                $path = $folder . '/' . $entry;
-                if (is_file($path) && strtolower(pathinfo($entry, PATHINFO_EXTENSION)) === 'mp3') {
-                    fail(409, 'Kategorijoje dar yra MP3 failų. Pirmiausia juos pašalinkite.');
+                if (is_dir($newFolder)) {
+                    fail(409, 'Toks audio kategorijos aplankas jau yra');
                 }
+                if (!rename($oldFolder, $newFolder)) {
+                    fail(500, 'Nepavyko pervadinti audio kategorijos aplanko');
+                }
+                $renamed = true;
             }
-            foreach (scandir($folder) ?: [] as $entry) {
+
+            try {
+                $db->beginTransaction();
+                $db->prepare(
+                    'UPDATE track_types SET name 
