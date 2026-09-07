@@ -1,9 +1,9 @@
 {
-  "sha": "ddf4bf0b7dd9ac2cbf673878a329f358e149cd29",
-  "shortSha": "ddf4bf0",
+  "sha": "ef5ebd6078eea76fc132545b42192a1b32dc9465",
+  "shortSha": "ef5ebd6",
   "branch": "v2",
-  "message": "Add an author index to the Giesmės admin tab",
-  "date": "2026-09-07T08:46:55+03:00",
+  "message": "Fix admin search, XSS, unauthenticated re-index cost, backup safety",
+  "date": "2026-09-07T09:01:39+03:00",
   "dirty": true,
-  "builtAt": "2026-09-07T06:00:39.288Z"
+  "builtAt": "2026-09-07T06:14:20.811Z"
 }

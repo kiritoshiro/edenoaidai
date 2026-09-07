@@ -163,6 +163,8 @@
                 </tbody>
             </table>
         </div>
+
+        <CreditIndexPanel />
     </div>
 </template>
 
@@ -170,11 +172,13 @@
 import { api } from '../../lib/api';
 import { config } from '../../lib/config';
 import MediaLibraryPanel from '../../components/admin/MediaLibraryPanel.vue';
+import CreditIndexPanel from '../../components/admin/CreditIndexPanel.vue';
 
 export default {
     name: 'AdminDatabase',
     components: {
         MediaLibraryPanel,
+        CreditIndexPanel,
     },
     data() {
         return {
