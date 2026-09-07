@@ -13,6 +13,11 @@ on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
+  # Validate fixes to this workflow immediately instead of waiting for cron.
+  push:
+    branches: [v2]
+    paths:
+      - ".github/workflows/health.yml"
 
 permissions:
   issues: write
