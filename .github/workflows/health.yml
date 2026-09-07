@@ -71,13 +71,13 @@ jobs:
           REASON: ${{ steps.check.outputs.reason }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          existing=$(gh issue list --state open --search "in:title \"$INCIDENT_TITLE\"" --json number --jq '.[0].number')
+          existing=$(gh issue list --state open --search "in:title \"$INCIDENT_TITLE\"" --json number --jq '.[0].number' 2>/dev/null || true)
           body=$(printf 'Automated health check against giesmynas.adventistai.lt failed:\n\n> %s\n\nRun: %s' "$REASON" "$RUN_URL")
 
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "$body"
+            gh issue comment "$existing" --body "$body" || echo "::warning::Could not update the incident issue."
           else
-            gh issue create --title "$INCIDENT_TITLE" --body "$body" --label bug
+            gh issue create --title "$INCIDENT_TITLE" --body "$body" --label bug || echo "::warning::Repository Issues are unavailable; use the failed workflow notification as the alert."
           fi
 
       - name: Close incident issue on recovery
@@ -85,8 +85,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          existing=$(gh issue list --state open --search "in:title \"$INCIDENT_TITLE\"" --json number --jq '.[0].number')
+          existing=$(gh issue list --state open --search "in:title \"$INCIDENT_TITLE\"" --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "Health check passed again — closing."
-            gh issue close "$existing"
+            gh issue comment "$existing" --body "Health check passed again — closing." || echo "::warning::Could not comment on the incident issue."
+            gh issue close "$existing" || echo "::warning::Could not close the incident issue."
           fi
+
+      - name: Fail workflow when site is unhealthy
+        if: steps.check.outputs.ok == 'false'
+        env:
+          REASON: ${{ steps.check.outputs.reason }}
+        run: |
+          echo "::error::$REASON"
+          exit 1
