@@ -19,6 +19,9 @@ permissions:
 
 env:
   INCIDENT_TITLE: "🔴 Production health check failing"
+  # The job does not check out the repository, so tell gh explicitly which
+  # repository to use for issue list/create/comment/close commands.
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   health:
