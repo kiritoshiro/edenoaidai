@@ -238,7 +238,19 @@ function github_update(string $source, string $ref): array
             throw new RuntimeException('Pasirinktoje GitHub versijoje nerastas server/ katalogas');
         }
 
-        $appRoot = dirname(__DIR__);
+        // This file lives at <webroot>/api/lib/github.php, so reaching
+        // <webroot> takes two levels, not one — dirname(__DIR__) alone
+        // lands at <webroot>/api instead. That was the actual bug here:
+        // every file below got copied one directory too deep (into
+        // <webroot>/api/index.html, <webroot>/api/assets/, even a nested
+        // <webroot>/api/api/index.php), so github_copy_tree() completed
+        // without error and record_applied_version() below recorded a
+        // "successful" update, but the real <webroot>/index.html and
+        // <webroot>/api/index.php that nginx actually serves were never
+        // touched. See build_time_version() in common.php for the
+        // already-correct version of this same lookup from the same
+        // directory.
+        $appRoot = dirname(__DIR__, 2);
         github_copy_tree($sourceRoot, $appRoot, ['files', 'storage']);
         // rsync without --delete would leave these removed legacy files behind.
         foreach ([
