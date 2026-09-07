@@ -5,6 +5,7 @@ server/api/config.php
 frontend/node_modules/
 .update-backups/
 server/storage/audio-index.lock
+server/storage/audio-index.synced
 server/storage/github-update.lock
 server/storage/last-update.json
 server/storage/backups/*.json

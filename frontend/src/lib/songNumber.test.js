@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    compareSongIds,
     findSongIdByNumber,
     formatSongNumber,
     maximumSongNumber,
@@ -52,4 +53,12 @@ test('uses one stable key for supported number spellings', () => {
     assert.equal(songNumberKey('36.'), '36A');
     assert.equal(songNumberKey('36,'), '36A');
     assert.equal(songNumberKey('36 B'), '');
+});
+
+test('orders song ids numerically, with a lettered id right after its base number', () => {
+    const ids = ['9', '10', '10 A', '10 B', '2', '2 A', '27', '27 A', '1'];
+    assert.deepEqual(
+        [...ids].sort(compareSongIds),
+        ['1', '2', '2 A', '9', '10', '10 A', '10 B', '27', '27 A'],
+    );
 });

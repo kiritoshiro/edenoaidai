@@ -1,3 +1,11 @@
+const ID_COLLATOR = new Intl.Collator('lt', { numeric: true, sensitivity: 'base' });
+
+// Matches the server's own ordering (`CAST(song_id AS UNSIGNED), song_id`
+// in common.php's build_public_db()): numeric first, "27" before "27 A".
+export function compareSongIds(a, b) {
+    return ID_COLLATOR.compare(String(a ?? ''), String(b ?? ''));
+}
+
 export function songNumberKey(value) {
     const match = String(value ?? '')
         .trim()

@@ -1,9 +1,9 @@
 {
-  "sha": "855a763e0326c0579d3a7d2cdd2dee6c2edad6d3",
-  "shortSha": "855a763",
+  "sha": "ddf4bf0b7dd9ac2cbf673878a329f358e149cd29",
+  "shortSha": "ddf4bf0",
   "branch": "v2",
-  "message": "Fix CI failures found by actually running it on GitHub's runners",
-  "date": "2026-09-06T21:53:44+03:00",
+  "message": "Add an author index to the Giesmės admin tab",
+  "date": "2026-09-07T08:46:55+03:00",
   "dirty": true,
-  "builtAt": "2026-09-07T05:45:35.708Z"
+  "builtAt": "2026-09-07T06:00:39.288Z"
 }

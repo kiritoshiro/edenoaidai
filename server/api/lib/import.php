@@ -133,8 +133,14 @@ function import_songs(PDO $db, array $rows): int
             $ids[] = $row['song_id'];
         }
 
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $db->prepare("DELETE FROM songs WHERE song_id NOT IN ($placeholders)")->execute($ids);
+        // validate_songs_json() already rejects an empty song list before
+        // this ever runs, so $ids is never empty in practice today — but
+        // "NOT IN ()" is invalid SQL, and guarding it explicitly is cheaper
+        // than relying on that always staying true at every call site.
+        if ($ids) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $db->prepare("DELETE FROM songs WHERE song_id NOT IN ($placeholders)")->execute($ids);
+        }
 
         $db->commit();
     } catch (Throwable $e) {
@@ -175,9 +181,13 @@ function import_database(PDO $db, array $songs, array $types): array
             $songIds[] = $song['song_id'];
         }
 
-        $songPlaceholders = implode(',', array_fill(0, count($songIds), '?'));
-        $db->prepare("DELETE FROM songs WHERE song_id NOT IN ($songPlaceholders)")
-            ->execute($songIds);
+        // See the matching guard in import_songs() above for why this
+        // check exists even though $songIds is never empty today.
+        if ($songIds) {
+            $songPlaceholders = implode(',', array_fill(0, count($songIds), '?'));
+            $db->prepare("DELETE FROM songs WHERE song_id NOT IN ($songPlaceholders)")
+                ->execute($songIds);
+        }
 
         // Track assignments are part of the export, so replace them together
         // with the recording-category metadata.
@@ -237,16 +247,27 @@ function import_database(PDO $db, array $songs, array $types): array
 }
 
 // Prieš pakeitimą – dabartinės būsenos JSON kopija į storage/backups/
+//
+// Every caller runs this immediately before a destructive import that
+// deletes and replaces the songs table — so a backup that fails silently
+// used to mean the import went ahead anyway, with no recoverable copy of
+// what it just overwrote. Every failure path here now throws instead.
 function backup_database(PDO $db, string $name): string
 {
     $dir = storage_dir() . '/backups';
-    if (!is_dir($dir)) {
-        mkdir($dir, 0775, true);
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        throw new RuntimeException('Nepavyko sukurti atsarginių kopijų aplanko – importas nutrauktas');
     }
     $stamp = str_replace([':', '.'], '-', date('Y-m-d\TH-i-s'));
     $data = $name === 'db' ? build_database_export($db) : build_public_tracks($db);
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    if ($json === false) {
+        throw new RuntimeException('Nepavyko paruošti atsarginės kopijos – importas nutrauktas');
+    }
     $target = "$dir/$name-$stamp.json";
-    file_put_contents($target, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    if (file_put_contents($target, $json) === false) {
+        throw new RuntimeException('Nepavyko įrašyti atsarginės kopijos – importas nutrauktas');
+    }
     return $target;
 }
 

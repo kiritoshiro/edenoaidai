@@ -432,6 +432,26 @@ function song_to_api(array $row, ?array $lists = null): array
     return $song;
 }
 
+// song.copyright is rendered with v-html to every visitor (Single.vue), so
+// unlike verse/body — which only ever reach the page through {{ }}
+// interpolation, auto-escaped by Vue — it is a genuine script-injection
+// sink: whatever is stored here executes verbatim in every reader's
+// browser. Keeps only inline text decorations already used across the
+// existing data (<br>, plus a few unused-but-harmless ones) and strips
+// every attribute from what survives, since none of them need one and
+// that is where onclick=/style=/href="javascript:" etc. would hide.
+const COPYRIGHT_ALLOWED_TAGS = '<br><b><i><em><strong><sup><sub>';
+
+function sanitize_copyright_html(string $html): string
+{
+    $html = strip_tags($html, COPYRIGHT_ALLOWED_TAGS);
+    // strip_tags() only removes disallowed tags — it leaves attributes on
+    // the ones it keeps untouched, so this second pass drops everything
+    // inside a surviving tag except its name.
+    $html = preg_replace('/<(\/?)(\w+)[^>]*>/u', '<$1$2>', $html) ?? $html;
+    return trim($html);
+}
+
 function sanitize_song(array $input): array
 {
     $song = [];
@@ -447,10 +467,13 @@ function sanitize_song(array $input): array
             $song['title'] = $title;
         }
     }
-    foreach (['verse', 'body', 'copyright'] as $field) {
+    foreach (['verse', 'body'] as $field) {
         if (isset($input[$field]) && is_string($input[$field])) {
             $song[$field] = $input[$field];
         }
+    }
+    if (isset($input['copyright']) && is_string($input['copyright'])) {
+        $song['copyright'] = sanitize_copyright_html($input['copyright']);
     }
     if (array_key_exists('slides', $input)) {
         $song['slides_json'] = json_encode(
@@ -598,6 +621,17 @@ function audio_category_directories(): array
  * Kategorijos, ikonos ir MP3 priskyrimai perrašomi MySQL lentelėse.
  * Esamas administratoriaus pakeistas kategorijos label išsaugomas.
  */
+// Every request to a public, unauthenticated route re-runs this on every
+// hit (see the call sites in index.php) so that admin folder changes show
+// up without a separate "reindex" step. But that means an unauthenticated
+// caller can force a locked, full directory scan plus a DB transaction on
+// every single request — cheap amplification against the DB, and needless
+// write load on what should be a plain read path. Every admin action that
+// actually changes the audio folders already passes force=true, so gating
+// only the non-forced path on a short cooldown costs those callers nothing
+// while capping how often anonymous traffic can trigger the expensive path.
+const AUDIO_LIBRARY_SYNC_COOLDOWN_SECONDS = 60;
+
 function sync_audio_library(PDO $db, bool $force = false): array
 {
     static $result = null;
@@ -609,6 +643,19 @@ function sync_audio_library(PDO $db, bool $force = false): array
     if (!is_dir($storage) && !mkdir($storage, 0775, true) && !is_dir($storage)) {
         throw new RuntimeException('Nepavyko sukurti storage aplanko');
     }
+
+    $syncedMarker = $storage . '/audio-index.synced';
+    if (!$force) {
+        $lastSynced = is_file($syncedMarker) ? (int) filemtime($syncedMarker) : 0;
+        if (time() - $lastSynced < AUDIO_LIBRARY_SYNC_COOLDOWN_SECONDS) {
+            $result = [
+                'categories' => (int) $db->query('SELECT COUNT(*) FROM track_types')->fetchColumn(),
+                'audioFiles' => (int) $db->query('SELECT COUNT(*) FROM song_tracks')->fetchColumn(),
+            ];
+            return $result;
+        }
+    }
+
     $lockHandle = fopen($storage . '/audio-index.lock', 'c');
     if ($lockHandle === false || !flock($lockHandle, LOCK_EX)) {
         throw new RuntimeException('Nepavyko užrakinti audio indekso');
@@ -682,6 +729,7 @@ function sync_audio_library(PDO $db, bool $force = false): array
         }
 
         $db->commit();
+        touch($syncedMarker);
         $result = [
             'categories' => count($names),
             'audioFiles' => $audioCount,

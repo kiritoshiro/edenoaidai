@@ -139,7 +139,11 @@ export default {
             if (!needle) return this.songs;
             return this.songs.filter(
                 song =>
-                    String(song.songId).startsWith(needle) ||
+                    // song.songId isn't folded on the other side: for a
+                    // lettered id like "27 A", needle is "27 a" (folded) but
+                    // the id itself is never lowercased, so startsWith always
+                    // failed for every one of the 38 lettered hymns.
+                    fold(String(song.songId)).startsWith(needle) ||
                     fold(this.title(song)).includes(needle),
             );
         },

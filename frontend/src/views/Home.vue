@@ -18,6 +18,7 @@
 
 <script>
 import List from '../components/List.vue';
+import { compareSongIds } from '../lib/songNumber';
 
 export default {
     name: 'Home',
@@ -47,7 +48,15 @@ export default {
                 .orderBy('id')
                 .toArray()
                 .then(songs => {
-                    this.songs = songs;
+                    // orderBy('id') alone happens to match hymn-number order
+                    // today only because Install.vue bulk-inserts rows in
+                    // the order the API returned them in, which is itself
+                    // sorted — three unrelated things staying coincidentally
+                    // aligned. Sorting explicitly here doesn't depend on any
+                    // of that.
+                    this.songs = [...songs].sort((a, b) =>
+                        compareSongIds(a.songId, b.songId),
+                    );
                 })
                 .catch(error => console.error(error));
         },

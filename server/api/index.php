@@ -656,6 +656,12 @@ if ($first === 'import' && count($segments) === 2 && $method === 'POST') {
         }
     } catch (InvalidArgumentException $e) {
         fail(400, $e->getMessage());
+    } catch (RuntimeException $e) {
+        // backup_database() failing to write its pre-import snapshot lands
+        // here — the import above it never ran, but without this the admin
+        // would only see the generic top-level "Serverio klaida" instead of
+        // knowing it was the backup step that stopped the import.
+        fail(500, $e->getMessage());
     }
 }
 
