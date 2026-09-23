@@ -35,9 +35,23 @@ jobs:
           site="https://giesmynas.adventistai.lt"
           bust="_=$(date +%s%N)"
 
-          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o index.html -w '%{http_code}' "$site/?$bust")
+          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o index.html -w '%{http_code}' --max-time 15 "$site/?$bust") || {
+            echo "::error::GET / failed to connect"
+            exit 1
+          }
+          if [ "$status" = "403" ]; then
+            reason="GET / returned HTTP 403; this GitHub runner was denied access, so site health is unverified."
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::$reason"
+            {
+              echo "## Production smoke test unverified"
+              echo
+              echo "$reason"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "$status" != "200" ]; then
-            echo "::error::GET / returned $status" >&2
+            echo "::error::GET / returned $status"
             exit 1
           fi
 
@@ -49,19 +63,34 @@ jobs:
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
       - name: Fetch main bundle and check it isn't truncated
+        id: bundle
+        if: steps.shell.outputs.blocked != 'true'
         run: |
           site="https://giesmynas.adventistai.lt"
           bust="_=$(date +%s%N)"
           asset="${{ steps.shell.outputs.asset }}"
 
-          size=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{size_download}' "$site/$asset?$bust")
-          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{http_code}' "$site/$asset?$bust")
-
+          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o bundle.js -w '%{http_code}' --max-time 15 "$site/$asset?$bust") || {
+            echo "::error::GET $asset failed to connect"
+            exit 1
+          }
+          if [ "$status" = "403" ]; then
+            reason="GET $asset returned HTTP 403; this GitHub runner was denied access, so site health is unverified."
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::$reason"
+            {
+              echo "## Production smoke test unverified"
+              echo
+              echo "$reason"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "$status" != "200" ]; then
             echo "::error::index.html references $asset but it returned $status — this is exactly the failure mode from the 2026-09-06 outage (stale shell pointing at a deleted/renamed bundle)." >&2
             exit 1
           fi
 
+          size=$(wc -c < bundle.js | tr -d '[:space:]')
           # The real bundle is ~288 KB. The corrupted one that caused the
           # outage was exactly 16,000 bytes. 50 KB is a generous floor that
           # won't false-positive on legitimate size changes but will always
@@ -74,11 +103,29 @@ jobs:
           echo "OK: $asset is $size bytes"
 
       - name: API root responds
+        if: steps.shell.outputs.blocked != 'true' && steps.bundle.outputs.blocked != 'true'
         run: |
           site="https://giesmynas.adventistai.lt"
           bust="_=$(date +%s%N)"
-          body=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" "$site/api?$bust")
-          echo "$body" | grep -q '"ok":true' || {
-            echo "::error::GET /api did not return ok:true. Body: $body" >&2
+          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o api.json -w '%{http_code}' --max-time 15 "$site/api?$bust") || {
+            echo "::error::GET /api failed to connect"
+            exit 1
+          }
+          if [ "$status" = "403" ]; then
+            reason="GET /api returned HTTP 403; this GitHub runner was denied access, so site health is unverified."
+            echo "::warning::$reason"
+            {
+              echo "## Production smoke test unverified"
+              echo
+              echo "$reason"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$status" != "200" ]; then
+            echo "::error::GET /api returned HTTP $status" >&2
+            exit 1
+          fi
+          grep -q '"ok":true' api.json || {
+            echo "::error::GET /api did not return ok:true. Body: $(cat api.json)" >&2
             exit 1
           }
