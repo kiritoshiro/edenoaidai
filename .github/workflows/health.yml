@@ -49,22 +49,54 @@ jobs:
             } >> "$GITHUB_OUTPUT"
             exit 0
           }
+          unverified() {
+            echo "ok=unknown" >> "$GITHUB_OUTPUT"
+            {
+              echo 'reason<<REASON_EOF'
+              echo "$1"
+              echo 'REASON_EOF'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
 
           status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o index.html -w '%{http_code}' --max-time 15 "$site/?$bust") || fail "GET / failed to connect"
+          if [ "$status" = "403" ]; then
+            unverified "GET / returned HTTP 403; this GitHub runner was denied access, so site health is unverified."
+          fi
           [ "$status" = "200" ] || fail "GET / returned HTTP $status"
 
           asset=$(grep -o 'assets/index-[^"]*\.js' index.html | head -1)
           [ -n "$asset" ] || fail "No main JS bundle reference found in index.html — the shell markup itself may be broken."
 
-          size=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{size_download}' --max-time 15 "$site/$asset?$bust")
-          astatus=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{http_code}' --max-time 15 "$site/$asset?$bust")
+          asset_result=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{http_code} %{size_download}' --max-time 15 "$site/$asset?$bust") || fail "GET $asset failed to connect"
+          astatus=${asset_result%% *}
+          size=${asset_result#* }
+          if [ "$astatus" = "403" ]; then
+            unverified "GET $asset returned HTTP 403; this GitHub runner was denied access, so site health is unverified."
+          fi
           [ "$astatus" = "200" ] || fail "index.html references $asset but it returned HTTP $astatus."
           [ "$size" -ge 50000 ] || fail "$asset is only $size bytes (expected >50000) — looks truncated, same signature as the 2026-09-06 outage."
 
-          api=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" --max-time 15 "$site/api?$bust")
-          echo "$api" | grep -q '"ok":true' || fail "GET /api did not return ok:true. Body: $api"
+          api_status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o api.json -w '%{http_code}' --max-time 15 "$site/api?$bust") || fail "GET /api failed to connect"
+          if [ "$api_status" = "403" ]; then
+            unverified "GET /api returned HTTP 403; this GitHub runner was denied access, so site health is unverified."
+          fi
+          [ "$api_status" = "200" ] || fail "GET /api returned HTTP $api_status"
+          grep -q '"ok":true' api.json || fail "GET /api did not return ok:true. Body: $(cat api.json)"
 
           echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Warn when site health is unverified
+        if: steps.check.outputs.ok == 'unknown'
+        env:
+          REASON: ${{ steps.check.outputs.reason }}
+        run: |
+          echo "::warning::$REASON"
+          {
+            echo "## Production health unverified"
+            echo
+            echo "$REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open or update incident issue
         if: steps.check.outputs.ok == 'false'
