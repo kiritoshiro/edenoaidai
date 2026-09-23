@@ -27,6 +27,8 @@ env:
   # The job does not check out the repository, so tell gh explicitly which
   # repository to use for issue list/create/comment/close commands.
   GH_REPO: ${{ github.repository }}
+  # Browser-like UA may reduce Cloudflare Bot Fight Mode challenges; IP/region rules still apply.
+  HEALTH_CHECK_USER_AGENT: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 
 jobs:
   health:
@@ -48,18 +50,18 @@ jobs:
             exit 0
           }
 
-          status=$(curl -s -o index.html -w '%{http_code}' --max-time 15 "$site/?$bust") || fail "GET / failed to connect"
+          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o index.html -w '%{http_code}' --max-time 15 "$site/?$bust") || fail "GET / failed to connect"
           [ "$status" = "200" ] || fail "GET / returned HTTP $status"
 
           asset=$(grep -o 'assets/index-[^"]*\.js' index.html | head -1)
           [ -n "$asset" ] || fail "No main JS bundle reference found in index.html — the shell markup itself may be broken."
 
-          size=$(curl -s -o /dev/null -w '%{size_download}' --max-time 15 "$site/$asset?$bust")
-          astatus=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$site/$asset?$bust")
+          size=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{size_download}' --max-time 15 "$site/$asset?$bust")
+          astatus=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{http_code}' --max-time 15 "$site/$asset?$bust")
           [ "$astatus" = "200" ] || fail "index.html references $asset but it returned HTTP $astatus."
           [ "$size" -ge 50000 ] || fail "$asset is only $size bytes (expected >50000) — looks truncated, same signature as the 2026-09-06 outage."
 
-          api=$(curl -s --max-time 15 "$site/api?$bust")
+          api=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" --max-time 15 "$site/api?$bust")
           echo "$api" | grep -q '"ok":true' || fail "GET /api did not return ok:true. Body: $api"
 
           echo "ok=true" >> "$GITHUB_OUTPUT"
