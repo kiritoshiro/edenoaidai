@@ -37,6 +37,9 @@ jobs:
         id: check
         run: |
           site="https://giesmynas.adventistai.lt"
+          # Cloudflare Bot Fight Mode may challenge curl's default User-Agent.
+          # This browser-like UA does not bypass IP- or region-based firewall rules.
+          browser_ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
           bust="_=$(date +%s%N)"
           fail() {
             echo "ok=false" >> "$GITHUB_OUTPUT"
@@ -48,18 +51,18 @@ jobs:
             exit 0
           }
 
-          status=$(curl -s -o index.html -w '%{http_code}' --max-time 15 "$site/?$bust") || fail "GET / failed to connect"
+          status=$(curl -s -A "$browser_ua" -o index.html -w '%{http_code}' --max-time 15 "$site/?$bust") || fail "GET / failed to connect"
           [ "$status" = "200" ] || fail "GET / returned HTTP $status"
 
           asset=$(grep -o 'assets/index-[^"]*\.js' index.html | head -1)
           [ -n "$asset" ] || fail "No main JS bundle reference found in index.html — the shell markup itself may be broken."
 
-          size=$(curl -s -o /dev/null -w '%{size_download}' --max-time 15 "$site/$asset?$bust")
-          astatus=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$site/$asset?$bust")
+          size=$(curl -s -A "$browser_ua" -o /dev/null -w '%{size_download}' --max-time 15 "$site/$asset?$bust")
+          astatus=$(curl -s -A "$browser_ua" -o /dev/null -w '%{http_code}' --max-time 15 "$site/$asset?$bust")
           [ "$astatus" = "200" ] || fail "index.html references $asset but it returned HTTP $astatus."
           [ "$size" -ge 50000 ] || fail "$asset is only $size bytes (expected >50000) — looks truncated, same signature as the 2026-09-06 outage."
 
-          api=$(curl -s --max-time 15 "$site/api?$bust")
+          api=$(curl -s -A "$browser_ua" --max-time 15 "$site/api?$bust")
           echo "$api" | grep -q '"ok":true' || fail "GET /api did not return ok:true. Body: $api"
 
           echo "ok=true" >> "$GITHUB_OUTPUT"
