@@ -21,6 +21,9 @@ on:
     branches: [v2]
   workflow_dispatch:
 
+env:
+  # Browser-like UA may reduce Cloudflare Bot Fight Mode challenges; IP/region rules still apply.
+  HEALTH_CHECK_USER_AGENT: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 jobs:
   smoke:
     name: Smoke test giesmynas.adventistai.lt
@@ -32,7 +35,7 @@ jobs:
           site="https://giesmynas.adventistai.lt"
           bust="_=$(date +%s%N)"
 
-          status=$(curl -s -o index.html -w '%{http_code}' "$site/?$bust")
+          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o index.html -w '%{http_code}' "$site/?$bust")
           if [ "$status" != "200" ]; then
             echo "::error::GET / returned $status" >&2
             exit 1
@@ -51,8 +54,8 @@ jobs:
           bust="_=$(date +%s%N)"
           asset="${{ steps.shell.outputs.asset }}"
 
-          size=$(curl -s -o /dev/null -w '%{size_download}' "$site/$asset?$bust")
-          status=$(curl -s -o /dev/null -w '%{http_code}' "$site/$asset?$bust")
+          size=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{size_download}' "$site/$asset?$bust")
+          status=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" -o /dev/null -w '%{http_code}' "$site/$asset?$bust")
 
           if [ "$status" != "200" ]; then
             echo "::error::index.html references $asset but it returned $status — this is exactly the failure mode from the 2026-09-06 outage (stale shell pointing at a deleted/renamed bundle)." >&2
@@ -74,7 +77,7 @@ jobs:
         run: |
           site="https://giesmynas.adventistai.lt"
           bust="_=$(date +%s%N)"
-          body=$(curl -s "$site/api?$bust")
+          body=$(curl -s -A "$HEALTH_CHECK_USER_AGENT" "$site/api?$bust")
           echo "$body" | grep -q '"ok":true' || {
             echo "::error::GET /api did not return ok:true. Body: $body" >&2
             exit 1
