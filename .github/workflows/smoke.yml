@@ -24,6 +24,9 @@ on:
 env:
   # Browser-like UA may reduce Cloudflare Bot Fight Mode challenges; IP/region rules still apply.
   HEALTH_CHECK_USER_AGENT: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+permissions:
+  contents: read
+
 jobs:
   smoke:
     name: Smoke test giesmynas.adventistai.lt
