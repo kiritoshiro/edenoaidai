@@ -1,0 +1,11 @@
+{
+  "category": "Standalone Vue PWA with PHP API",
+  "source_paths": [
+    "frontend/src",
+    "server/api"
+  ],
+  "semgrep_rules": [
+    "p/php",
+    "p/javascript"
+  ]
+}
