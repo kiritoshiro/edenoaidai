@@ -47,3 +47,19 @@ Never ship `.github/security` or its tooling in application packages.
 Public conversion is a separate decision. Review full history, release assets,
 credentials, personal data, licensing and fork restrictions before changing
 visibility. No visibility changes are part of this rollout.
+
+## Security gate
+
+`.github/workflows/security-gate.yml` is the only workflow that triggers security
+scans (PRs and pushes to `v2`, weekly on Tuesday, and manually). It calls the
+reusable `cybersecurity.yml` (zizmor, Trivy, actionlint), `security.yml`
+(config.php guard, token patterns, Gitleaks, Semgrep) and `codeql.yml`
+(JavaScript/TypeScript), and adds `npm audit` (shipped dependencies at moderate,
+all at high) and, on PRs, dependency review (moderate). Its final job,
+**All security checks passed**, fails unless every one of those succeeded;
+a cancelled or unexpectedly skipped check counts as a failure.
+
+Branch protection on `v2` should require **All security checks passed** and the
+code-scanning **CodeQL** check (which fails on new CodeQL alerts; the Actions
+job only runs the analysis). The CI checks in `ci.yml` remain separately
+required. To check a release candidate, run the gate manually on that commit.
