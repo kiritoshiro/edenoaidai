@@ -222,6 +222,40 @@ function assert_page(mixed $value): int
     return $page;
 }
 
+/**
+ * Uploaded SVGs are served from this site's own /files/ URL. The app only
+ * shows them through <img>, where scripts never run, but anyone who opens
+ * the file directly would run its scripts with this origin's privileges,
+ * including the administrator's session. Sheet music and icons never need
+ * active content, so refuse any SVG that has it. This is a denylist, so it
+ * backs up the nginx CSP sandbox on /files/ rather than replacing it.
+ */
+function svg_is_safe(string $svg): bool
+{
+    $variants = [$svg, html_entity_decode($svg, ENT_QUOTES | ENT_HTML5 | ENT_XML1, 'UTF-8')];
+    foreach ($variants as $text) {
+        if (preg_match(
+            '/<\s*(?:[a-z0-9_-]+:)?(?:script|foreignobject|iframe|embed|object|handler|listener)\b'
+            . '|<!ENTITY'
+            . '|<[^>]*\son[a-z]+\s*='
+            . '|j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:'
+            . '|data\s*:\s*(?:text\/html|application\/(?:xhtml\+xml|javascript)|image\/svg)/i',
+            $text,
+        )) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function assert_safe_svg_file(string $path): void
+{
+    $contents = file_get_contents($path);
+    if ($contents === false || !svg_is_safe($contents)) {
+        fail(400, 'SVG faile yra skriptų ar kito aktyvaus turinio, todėl jis atmestas');
+    }
+}
+
 function notes_file_name(string $songId, int $page, string $format): string
 {
     return $page === 0 ? "$songId.$format" : "{$songId}_{$page}.$format";
@@ -331,6 +365,48 @@ function do_logout(): void
         setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
     }
     session_destroy();
+}
+
+/**
+ * Reject state-changing requests sent by another site (CSRF). SameSite=Lax on
+ * the session cookie stops other *sites*, but every *.adventistai.lt host
+ * counts as the same site, so a compromised neighbour could still post here
+ * with the administrator's cookie. Browsers send Sec-Fetch-Site (and Origin
+ * on non-GET requests) and pages cannot forge either. A request carrying
+ * neither header did not come from a modern browser, so no session cookie
+ * can be abused through it.
+ */
+function require_same_origin(): void
+{
+    $fetchSite = strtolower(trim((string) ($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '')));
+    if ($fetchSite === 'same-origin' || $fetchSite === 'none') {
+        return;
+    }
+
+    $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+    if ($origin === '') {
+        if ($fetchSite === '') {
+            return;
+        }
+        fail(403, 'Užklausa iš kitos svetainės atmesta');
+    }
+
+    $originHost = strtolower((string) parse_url($origin, PHP_URL_HOST));
+    $originPort = parse_url($origin, PHP_URL_PORT);
+    $originAuthority = $originHost . ($originPort ? ':' . $originPort : '');
+    $host = strtolower(trim((string) ($_SERVER['HTTP_HOST'] ?? '')));
+    if ($originHost !== '' && $originAuthority === $host) {
+        return;
+    }
+
+    $allowed = array_map(
+        fn ($value) => rtrim(strtolower(trim((string) $value)), '/'),
+        (array) (config()['allowed_origins'] ?? []),
+    );
+    if (in_array(rtrim(strtolower($origin), '/'), $allowed, true)) {
+        return;
+    }
+    fail(403, 'Užklausa iš kitos svetainės atmesta');
 }
 
 function client_ip(): string

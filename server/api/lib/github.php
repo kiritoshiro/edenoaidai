@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// The final job of .github/workflows/security-gate.yml. A commit only gets a
+// successful check run with this name when every security scan passed on it.
+const GITHUB_SECURITY_CHECK = 'All security checks passed';
+
 function github_settings(): array
 {
     $config = config();
@@ -10,7 +14,22 @@ function github_settings(): array
         'repo' => (string) ($config['github_repo'] ?? 'edenoaidai'),
         'branch' => (string) ($config['github_branch'] ?? 'v2'),
         'token' => trim((string) ($config['github_token'] ?? '')),
+        'require_security_checks' => (bool) ($config['github_require_security_checks'] ?? true),
     ];
+}
+
+function github_path_ref(string $ref): string
+{
+    return implode('/', array_map('rawurlencode', explode('/', $ref)));
+}
+
+function github_json(string $path): array
+{
+    $data = json_decode(github_request($path), true);
+    if (!is_array($data)) {
+        throw new RuntimeException('GitHub grąžino netinkamą atsakymą');
+    }
+    return $data;
 }
 
 function github_request(string $path, bool $binary = false): string
@@ -141,6 +160,66 @@ function github_ref_is_safe(string $ref, string $source): bool
         && !str_contains($ref, '..');
 }
 
+/**
+ * Resolve the administrator's choice to one full commit SHA, and refuse it
+ * unless it is safe to deploy:
+ *
+ * - It must be on the configured branch. GitHub serves any commit from the
+ *   whole fork network through this repository's own URLs, so without this a
+ *   SHA that exists only in someone's fork would be downloaded and installed.
+ * - Unless disabled in config.php, the security gate must have passed on that
+ *   exact commit. Commits from before the gate existed have no such check run;
+ *   set 'github_require_security_checks' => false only for an emergency
+ *   rollback to one of them.
+ */
+function github_resolve_deployable(string $source, string $ref): string
+{
+    $settings = github_settings();
+
+    if ($source === 'release') {
+        $release = github_json('/releases/tags/' . github_path_ref($ref));
+        if (!empty($release['draft'])) {
+            throw new InvalidArgumentException('Juodraštinio release diegti negalima');
+        }
+    }
+
+    $commit = github_json('/commits/' . github_path_ref($ref));
+    $sha = strtolower((string) ($commit['sha'] ?? ''));
+    if (!preg_match('/^[0-9a-f]{40}$/', $sha)) {
+        throw new RuntimeException('GitHub negrąžino commit SHA');
+    }
+
+    $compare = github_json('/compare/' . github_path_ref($settings['branch']) . '...' . $sha . '?per_page=1');
+    if (!in_array($compare['status'] ?? '', ['identical', 'behind'], true)) {
+        throw new InvalidArgumentException(
+            'Pasirinkta versija nepriklauso šakai ' . $settings['branch'] . ', todėl jos diegti negalima',
+        );
+    }
+
+    if ($settings['require_security_checks']) {
+        $runs = github_json('/commits/' . $sha . '/check-runs?filter=latest&check_name='
+            . rawurlencode(GITHUB_SECURITY_CHECK));
+        $passed = false;
+        foreach ($runs['check_runs'] ?? [] as $run) {
+            if (is_array($run)
+                && ($run['name'] ?? '') === GITHUB_SECURITY_CHECK
+                && ($run['status'] ?? '') === 'completed'
+                && ($run['conclusion'] ?? '') === 'success') {
+                $passed = true;
+                break;
+            }
+        }
+        if (!$passed) {
+            throw new InvalidArgumentException(
+                'Šiai versijai nėra sėkmingo GitHub saugumo patikrinimo („' . GITHUB_SECURITY_CHECK
+                . '“), todėl jos diegti negalima',
+            );
+        }
+    }
+
+    return $sha;
+}
+
 function github_copy_tree(string $source, string $target, array $protected): void
 {
     foreach (scandir($source) ?: [] as $entry) {
@@ -199,6 +278,9 @@ function github_update(string $source, string $ref): array
     }
 
     set_time_limit(300);
+    // Download by the verified SHA, never by the name the client sent, so a
+    // tag moved after the check cannot swap in different code.
+    $sha = github_resolve_deployable($source, $ref);
     $storage = storage_dir();
     if (!is_dir($storage) && !mkdir($storage, 0775, true) && !is_dir($storage)) {
         throw new RuntimeException('Nepavyko sukurti storage aplanko');
@@ -212,7 +294,7 @@ function github_update(string $source, string $ref): array
     mkdir($work, 0775, true);
     try {
         $archive = $work . '/source.zip';
-        file_put_contents($archive, github_request('/zipball/' . rawurlencode($ref), true));
+        file_put_contents($archive, github_request('/zipball/' . $sha, true));
         $zip = new ZipArchive();
         if ($zip->open($archive) !== true) {
             throw new RuntimeException('Nepavyko atidaryti GitHub archyvo');

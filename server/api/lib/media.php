@@ -467,6 +467,19 @@ function media_import_archive(array $file, string $kind, array $selected): array
                 $target = files_dir() . '/notes/' . $bucket . '/'
                     . notes_file_name($songId, $page, $bucket);
                 $maxBytes = 15 * 1024 * 1024;
+                // Checked here, before anything is written, so one bad SVG
+                // rejects the whole archive instead of half-importing it.
+                // Oversized entries are left to media_write_zip_entry(), which
+                // rejects them with the right message.
+                $stat = $zip->statIndex($index);
+                if ($bucket === 'svg' && (int) ($stat['size'] ?? 0) <= $maxBytes) {
+                    $svg = $zip->getFromIndex($index);
+                    if ($svg === false || !svg_is_safe($svg)) {
+                        throw new InvalidArgumentException(
+                            'Archyvo SVG faile ' . $filename . ' yra skriptų ar kito aktyvaus turinio',
+                        );
+                    }
+                }
             }
             if (isset($targets[$target])) {
                 throw new InvalidArgumentException('Archyve kartojasi tas pats media failas');
