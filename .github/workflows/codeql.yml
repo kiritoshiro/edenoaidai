@@ -6,19 +6,20 @@ name: CodeQL
 # the backend's actual coverage, and don't treat a green CodeQL check here
 # as "the API is secure."
 
+# Reusable: runs only through security-gate.yml, which owns the triggers
+# and the weekly schedule.
 on:
-  push:
-    branches: [v2]
-  pull_request:
-    branches: [v2]
-  schedule:
-    - cron: "23 4 * * 1" # weekly, Monday 04:23 UTC
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   analyze:
     name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       security-events: write
 
     steps:

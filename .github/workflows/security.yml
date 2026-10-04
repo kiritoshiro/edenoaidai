@@ -1,10 +1,8 @@
 name: Security
 
+# Reusable: runs only through security-gate.yml, which owns the triggers.
 on:
-  push:
-    branches: [v2]
-  pull_request:
-    branches: [v2]
+  workflow_call:
 
 permissions:
   contents: read
