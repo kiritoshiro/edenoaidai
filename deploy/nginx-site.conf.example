@@ -51,9 +51,13 @@ server {
     }
 
     # Uploaded audio, icons, and sheet music must exist as real files.
+    # The CSP sandbox stops a malicious uploaded SVG from running scripts with
+    # this site's origin when opened directly; <img> display is unaffected.
     location ^~ /files/ {
         try_files $uri =404;
         expires 7d;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'; sandbox" always;
+        add_header X-Content-Type-Options "nosniff" always;
     }
 
     # Always revalidate the application shell and service worker.

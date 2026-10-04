@@ -63,3 +63,24 @@ Branch protection on `v2` should require **All security checks passed** and the
 code-scanning **CodeQL** check (which fails on new CodeQL alerts; the Actions
 job only runs the analysis). The CI checks in `ci.yml` remain separately
 required. To check a release candidate, run the gate manually on that commit.
+
+The admin panel's GitHub updater enforces the same gate at deploy time. It
+resolves the chosen commit or release to a full SHA and refuses it unless the
+commit is on the configured branch (GitHub serves fork-only commits through this
+repository's URLs, so a bare SHA is not proof of origin) and a successful
+**All security checks passed** check run exists on it. It then downloads that
+SHA, not the requested name. For an emergency rollback to a commit from before
+the gate existed, set `'github_require_security_checks' => false` in
+`api/config.php` and switch it back afterwards; the branch requirement stays.
+
+## Request and upload hardening
+
+- POST/PUT/DELETE requests to the API are rejected when `Sec-Fetch-Site`/`Origin`
+  show they came from another origin. This includes other `*.adventistai.lt`
+  sites, which `SameSite=Lax` cookies do not stop. Extra trusted origins go in
+  `allowed_origins` in `api/config.php`.
+- Uploaded or ZIP-imported SVGs with scripts, event handlers, `javascript:` URLs,
+  `foreignObject` or entity declarations are refused. This is a denylist backing
+  up the CSP `sandbox` header for `/files/` in `deploy/nginx-site.conf.example`,
+  which must also be applied to the live nginx/Virtualmin config by hand. Files
+  uploaded before this change are not rescanned.

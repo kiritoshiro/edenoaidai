@@ -35,6 +35,12 @@ $isPublic =
     ($first === 'login' && $method === 'POST') ||
     ($first === 'logout' && $method === 'POST');
 
+// Covers login and logout too: forcing someone into (or out of) a session is
+// also a cross-site attack.
+if (!in_array($method, ['GET', 'HEAD', 'OPTIONS'], true)) {
+    require_same_origin();
+}
+
 if (!$isPublic) {
     require_auth();
 }
@@ -547,6 +553,9 @@ if ($first === 'tracks') {
             if (!in_array($extension, TRACK_ICON_EXTENSIONS, true)) {
                 fail(400, 'Ikona turi būti SVG, PNG, WEBP arba JPG failas');
             }
+            if ($extension === 'svg') {
+                assert_safe_svg_file($file['tmp_name']);
+            }
             foreach (TRACK_ICON_EXTENSIONS as $oldExtension) {
                 @unlink($folder . "/icon.$oldExtension");
             }
@@ -610,6 +619,9 @@ if ($first === 'files' && count($segments) === 4) {
                 : has_extension($file, ['.jpg', '.jpeg'], ['jpeg']);
             if (!$valid) {
                 fail(400, $format === 'svg' ? 'Failas turi būti SVG' : 'Failas turi būti JPG');
+            }
+            if ($format === 'svg') {
+                assert_safe_svg_file($file['tmp_name']);
             }
             save_upload($file, $target);
             json_out(['ok' => true, 'file' => "notes/$format/" . notes_file_name($songId, $page, $format)]);
