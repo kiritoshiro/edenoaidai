@@ -1,9 +1,9 @@
 {
-  "sha": "ef5ebd6078eea76fc132545b42192a1b32dc9465",
-  "shortSha": "ef5ebd6",
-  "branch": "v2",
-  "message": "Fix admin search, XSS, unauthenticated re-index cost, backup safety",
-  "date": "2026-09-07T09:01:39+03:00",
+  "sha": "247dbf29eebb883b02b2f7610804a48ce73b265b",
+  "shortSha": "247dbf2",
+  "branch": "fix/vue-advisories",
+  "message": "Merge pull request #7 from kiritoshiro/security/review-fixes",
+  "date": "2026-10-04T20:13:34+03:00",
   "dirty": true,
-  "builtAt": "2026-09-07T06:14:20.811Z"
+  "builtAt": "2026-10-06T08:39:26.375Z"
 }
