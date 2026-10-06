@@ -84,3 +84,6 @@ the gate existed, set `'github_require_security_checks' => false` in
   up the CSP `sandbox` header for `/files/` in `deploy/nginx-site.conf.example`,
   which must also be applied to the live nginx/Virtualmin config by hand. Files
   uploaded before this change are not rescanned.
+
+## WordPress checks and link checking (2026-10-06)
+- **Links**: `links.yml` checks the links in Markdown and `readme.txt` files with [lychee](https://github.com/lycheeverse/lychee). It runs on pull requests that change them, monthly and on demand. It is not part of the security gate, because a third-party site being down should not block a merge. Exclusions are in `.lychee.toml`; adventistai.lt is excluded because its Cloudflare bot protection answers GitHub runners with 403.
