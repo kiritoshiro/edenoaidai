@@ -96,6 +96,7 @@ export default {
         color: var(--app-text);
         background: transparent;
         font-size: 16px;
+        -webkit-appearance: none;
         appearance: none;
 
         &::placeholder {
@@ -103,7 +104,9 @@ export default {
         }
 
         // The component draws its own clear button
-        &::-webkit-search-cancel-button {
+        &::-webkit-search-cancel-button,
+        &::-webkit-search-decoration {
+            -webkit-appearance: none;
             appearance: none;
         }
     }

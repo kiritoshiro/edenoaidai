@@ -13,19 +13,26 @@
             </button>
         </header>
 
-        <search-box v-model="filter" class="home-page__search" />
+        <search-box ref="search" v-model="filter" class="home-page__search" />
+        <p class="visually-hidden" role="status">{{ statusText }}</p>
 
-        <p v-if="activeQuery && results.length" class="home-page__count">
-            Rasta: {{ results.length }}
-        </p>
+        <div ref="results">
+            <p
+                v-if="activeQuery && results.length"
+                class="home-page__count"
+                aria-hidden="true"
+            >
+                Rasta: {{ results.length }}
+            </p>
 
-        <div v-if="activeQuery && !results.length" class="empty-state">
-            <div>
-                <h2>Giesmių nerasta</h2>
-                <p>Patikrinkite įrašą arba pabandykite trumpesnę frazę.</p>
+            <div v-if="activeQuery && !results.length" class="empty-state">
+                <div>
+                    <h2>Giesmių nerasta</h2>
+                    <p>Patikrinkite įrašą arba pabandykite trumpesnę frazę.</p>
+                </div>
             </div>
+            <list v-else :songs="visibleSongs" :search-matches="searchMatches" />
         </div>
-        <list v-else :songs="visibleSongs" :search-matches="searchMatches" />
     </div>
 </template>
 
@@ -67,9 +74,19 @@ export default {
                 this.results.map(result => [String(result.song.songId), result]),
             );
         },
+        statusText() {
+            if (!this.activeQuery) return '';
+            return this.results.length
+                ? `Rasta: ${this.results.length}`
+                : 'Giesmių nerasta';
+        },
     },
     watch: {
         filter(value) {
+            // A song to scroll back to may not be in the new list; never
+            // let it make the page jump on a later filter change.
+            window.__scrollToSong = null;
+
             const query = value.trim();
             if (query) {
                 this.applyFilter(query);
@@ -78,6 +95,9 @@ export default {
                 this.applyFilter.cancel();
                 this.activeQuery = '';
             }
+        },
+        activeQuery() {
+            this.$nextTick(this.revealResults);
         },
     },
     created() {
@@ -111,6 +131,18 @@ export default {
                     );
                 })
                 .catch(error => console.error(error));
+        },
+        // A shorter list moves a scrolled page to its new end, which can
+        // leave the best matches under the sticky search box
+        revealResults() {
+            const box = this.$refs.search?.$el;
+            const results = this.$refs.results;
+            if (!box || !results) return;
+
+            const hidden =
+                box.getBoundingClientRect().bottom -
+                results.getBoundingClientRect().top;
+            if (hidden > 0) window.scrollBy({ top: -(hidden + 18) });
         },
         goToInstallPage() {
             this.$router.push({ name: 'install', query: { refresh: '1' } });
@@ -163,6 +195,11 @@ export default {
     position: sticky;
     top: 10px;
     z-index: 5;
+}
+
+// Keep keyboard-focused rows clear of the sticky search box
+.home-page .element a {
+    scroll-margin-top: 84px;
 }
 
 .home-page__count {

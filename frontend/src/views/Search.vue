@@ -5,9 +5,14 @@
             <p>Ieškokite pagal giesmės numerį, pavadinimą arba žodžius.</p>
         </header>
 
-        <search-box :model-value="query" @update:model-value="onInput" />
+        <search-box v-model="draft" />
+        <p class="visually-hidden" role="status">{{ statusText }}</p>
 
-        <p v-if="query && results.length" class="search-page__count">
+        <p
+            v-if="query && results.length"
+            class="search-page__count"
+            aria-hidden="true"
+        >
             Rasta: {{ results.length }}
         </p>
 
@@ -67,8 +72,12 @@ export default {
     },
     data() {
         return {
+            // What is in the box; the route catches up after a pause
+            draft: this.query,
+            sentQuery: this.query,
             results: [],
             searchRequestId: 0,
+            searchedAt: null,
         };
     },
     computed: {
@@ -91,35 +100,65 @@ export default {
                 this.results.map(result => [String(result.song.songId), result]),
             );
         },
+        statusText() {
+            if (!this.query) return '';
+            return this.results.length
+                ? `Rasta: ${this.results.length}`
+                : 'Giesmių nerasta';
+        },
     },
     watch: {
         // The prop only follows the search route, so opening a song from
         // the results no longer re-runs the whole search in the background.
-        query() {
+        query(value) {
+            // Navigation from elsewhere (the navbar link, a pasted URL)
+            // replaces the box; our own route updates leave typing alone
+            if (value !== this.sentQuery && value !== this.draft.trim()) {
+                this.draft = value;
+            }
             this.searchSongs();
+        },
+        draft(value) {
+            const query = value.trim();
+            if (query === this.query) {
+                this.updateSearchUri.cancel();
+            } else if (query) {
+                this.updateSearchUri(query);
+            } else {
+                // Clearing empties the results straight away
+                this.updateSearchUri.cancel();
+                this.replaceSearchUri('');
+            }
         },
     },
     created() {
-        this.updateSearchUri = debounce(this.updateSearchUri, 300);
+        this.updateSearchUri = debounce(this.replaceSearchUri, 300);
         this.searchSongs();
+    },
+    activated() {
+        // A pending update cancelled on the way out leaves the box ahead
+        if (this.draft.trim() !== this.query) this.draft = this.query;
+        // The database may have been refreshed while this view was cached
+        if (this.searchedAt !== localStorage.getItem('lastInstall')) {
+            this.searchSongs();
+        }
     },
     deactivated() {
         // A keystroke just before leaving must not pull the user back here
         this.updateSearchUri.cancel();
     },
     methods: {
-        onInput(value) {
-            this.updateSearchUri(value.trim());
-        },
-        updateSearchUri(query) {
+        replaceSearchUri(query) {
             if (this.$route.name !== 'search') return;
 
+            this.sentQuery = query;
             // Replace while typing so history is not spammed per keystroke
             this.$router.replace(
                 query ? { name: 'search', params: { query } } : { name: 'search' },
             );
         },
         searchSongs() {
+            this.searchedAt = localStorage.getItem('lastInstall');
             const search = (this.query || '').trim();
             const requestId = ++this.searchRequestId;
             if (!search) {
