@@ -18,15 +18,16 @@ function decodeEntities(value) {
 }
 
 function stripTags(value) {
-    // Strip until stable so nested fragments such as "<<b>p>" cannot re-form
-    // a tag, then drop stray brackets. Escaped ones (&lt; &gt;) are decoded later.
+    // The loop is the sanitizer shape CodeQL recognises (one pass already
+    // suffices). Lone brackets are escaped, not dropped, so decodeEntities turns
+    // them back into text and the admin editor keeps "a < b" or "<3" on save.
     let text = value;
     let previous;
     do {
         previous = text;
         text = text.replace(HTML_TAG, '');
     } while (text !== previous);
-    return text.replace(/[<>]/g, '');
+    return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function lyricsToPlainText(value) {

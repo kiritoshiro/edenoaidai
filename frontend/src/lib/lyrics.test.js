@@ -17,7 +17,18 @@ test('decodes each entity once', () => {
 });
 
 test('nested tag fragments leave no markup behind', () => {
-    assert.equal(lyricsToPlainText('<<b>script>alert(1)<</b>/script>'), 'scriptalert(1)/script');
+    assert.equal(lyricsToPlainText('<<b>script>alert(1)<</b>/script>'), 'script>alert(1)/script>');
+});
+
+test('lone brackets survive as text, so editor saves keep them', () => {
+    assert.equal(lyricsToPlainText('a < b'), 'a < b');
+    assert.equal(lyricsToPlainText('<3 tau'), '<3 tau');
+    assert.equal(lyricsToPlainText('5 > 3'), '5 > 3');
+    assert.equal(lyricsToPlainText(lyricsToPlainText('&lt;3')), '<3');
+});
+
+test('line-break variants and CRLF become newlines', () => {
+    assert.equal(lyricsToPlainText('a<BR />b<br/>c</div>d</li>e\r\nf'), 'a\nb\nc\nd\ne\nf');
 });
 
 test('empty input gives an empty string', () => {
