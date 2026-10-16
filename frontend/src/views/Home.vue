@@ -107,11 +107,16 @@ export default {
         this.load();
     },
     activated() {
+        // Keep keyboard-focused rows clear of the sticky search box
+        document.documentElement.style.scrollPaddingTop = '84px';
         // Reload the list if the database was refreshed while this
         // view was kept alive
         if (this.loadedAt !== localStorage.getItem('lastInstall')) {
             this.load();
         }
+    },
+    deactivated() {
+        document.documentElement.style.scrollPaddingTop = '';
     },
     methods: {
         load() {
@@ -195,11 +200,6 @@ export default {
     position: sticky;
     top: 10px;
     z-index: 5;
-}
-
-// Keep keyboard-focused rows clear of the sticky search box
-.home-page .element a {
-    scroll-margin-top: 84px;
 }
 
 .home-page__count {

@@ -74,7 +74,8 @@ export default {
         return {
             // What is in the box; the route catches up after a pause
             draft: this.query,
-            sentQuery: this.query,
+            // The route update we last sent, until its route change lands
+            sentQuery: null,
             results: [],
             searchRequestId: 0,
             searchedAt: null,
@@ -116,6 +117,7 @@ export default {
             if (value !== this.sentQuery && value !== this.draft.trim()) {
                 this.draft = value;
             }
+            this.sentQuery = null;
             this.searchSongs();
         },
         draft(value) {
