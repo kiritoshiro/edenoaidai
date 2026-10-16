@@ -9,11 +9,12 @@ function decodeEntities(value) {
 
     return value
         .replace(/&nbsp;/gi, ' ')
-        .replace(/&amp;/gi, '&')
         .replace(/&lt;/gi, '<')
         .replace(/&gt;/gi, '>')
         .replace(/&quot;/gi, '"')
-        .replace(/&#(?:39|x27);/gi, "'");
+        .replace(/&#(?:39|x27);/gi, "'")
+        // Last, so "&amp;lt;" stays the literal text "&lt;".
+        .replace(/&amp;/gi, '&');
 }
 
 export function lyricsToPlainText(value) {
@@ -21,7 +22,10 @@ export function lyricsToPlainText(value) {
         .replace(/\r\n?/g, '\n')
         .replace(/<br\s*\/?>\n?/gi, '\n')
         .replace(BLOCK_END_TAG, '\n')
-        .replace(HTML_TAG, '');
+        .replace(HTML_TAG, '')
+        // Stray brackets left by nested fragments such as "<<b>p>". Escaped
+        // brackets (&lt; &gt;) are still decoded below.
+        .replace(/[<>]/g, '');
 
     return decodeEntities(withoutMarkup)
         .replace(/\u00a0/g, ' ')
