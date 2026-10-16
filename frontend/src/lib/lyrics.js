@@ -17,15 +17,23 @@ function decodeEntities(value) {
         .replace(/&amp;/gi, '&');
 }
 
+function stripTags(value) {
+    // Strip until stable so nested fragments such as "<<b>p>" cannot re-form
+    // a tag, then drop stray brackets. Escaped ones (&lt; &gt;) are decoded later.
+    let text = value;
+    let previous;
+    do {
+        previous = text;
+        text = text.replace(HTML_TAG, '');
+    } while (text !== previous);
+    return text.replace(/[<>]/g, '');
+}
+
 export function lyricsToPlainText(value) {
-    const withoutMarkup = String(value || '')
+    const withoutMarkup = stripTags(String(value || '')
         .replace(/\r\n?/g, '\n')
         .replace(/<br\s*\/?>\n?/gi, '\n')
-        .replace(BLOCK_END_TAG, '\n')
-        .replace(HTML_TAG, '')
-        // Stray brackets left by nested fragments such as "<<b>p>". Escaped
-        // brackets (&lt; &gt;) are still decoded below.
-        .replace(/[<>]/g, '');
+        .replace(BLOCK_END_TAG, '\n'));
 
     return decodeEntities(withoutMarkup)
         .replace(/\u00a0/g, ' ')
