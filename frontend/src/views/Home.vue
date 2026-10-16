@@ -12,26 +12,78 @@
                 Atnaujinti
             </button>
         </header>
-        <list :songs="songs" />
+
+        <search-box v-model="filter" class="home-page__search" />
+
+        <p v-if="activeQuery && results.length" class="home-page__count">
+            Rasta: {{ results.length }}
+        </p>
+
+        <div v-if="activeQuery && !results.length" class="empty-state">
+            <div>
+                <h2>Giesmių nerasta</h2>
+                <p>Patikrinkite įrašą arba pabandykite trumpesnę frazę.</p>
+            </div>
+        </div>
+        <list v-else :songs="visibleSongs" :search-matches="searchMatches" />
     </div>
 </template>
 
 <script>
 import List from '../components/List.vue';
+import SearchBox from '../components/SearchBox.vue';
+import { debounce } from '../lib/debounce.js';
 import { compareSongIds } from '../lib/songNumber';
+import { createSongSearchResults } from '../lib/songSearch.js';
 
 export default {
     name: 'Home',
     components: {
         List,
+        SearchBox,
     },
     data() {
         return {
             songs: [],
             loadedAt: null,
+            filter: '',
+            activeQuery: '',
         };
     },
+    computed: {
+        // Every match, ranked like the search page: number, title, lyrics
+        results() {
+            return this.activeQuery
+                ? createSongSearchResults(this.songs, this.activeQuery, 0)
+                : [];
+        },
+        visibleSongs() {
+            return this.activeQuery
+                ? this.results.map(result => result.song)
+                : this.songs;
+        },
+        searchMatches() {
+            return Object.fromEntries(
+                this.results.map(result => [String(result.song.songId), result]),
+            );
+        },
+    },
+    watch: {
+        filter(value) {
+            const query = value.trim();
+            if (query) {
+                this.applyFilter(query);
+            } else {
+                // Clearing shows the full list straight away
+                this.applyFilter.cancel();
+                this.activeQuery = '';
+            }
+        },
+    },
     created() {
+        this.applyFilter = debounce(query => {
+            this.activeQuery = query;
+        }, 150);
         this.load();
     },
     activated() {
@@ -105,6 +157,18 @@ export default {
 .update-button:hover {
     color: var(--app-text);
     background: var(--app-surface-soft);
+}
+
+.home-page__search {
+    position: sticky;
+    top: 10px;
+    z-index: 5;
+}
+
+.home-page__count {
+    margin: -5px 4px 12px;
+    color: var(--app-muted);
+    font-size: 13px;
 }
 
 @media (max-width: 560px) {

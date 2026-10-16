@@ -5,19 +5,7 @@
             <p>Ieškokite pagal giesmės numerį, pavadinimą arba žodžius.</p>
         </header>
 
-        <div class="search-box">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-4-4" />
-            </svg>
-            <input
-                type="text"
-                placeholder="Giesmės numeris, pavadinimas ar žodžiai"
-                :value="query"
-                aria-label="Ieškoti giesmės"
-                @input="onInput"
-            />
-        </div>
+        <search-box :model-value="query" @update:model-value="onInput" />
 
         <p v-if="query && results.length" class="search-page__count">
             Rasta: {{ results.length }}
@@ -61,20 +49,15 @@
 
 <script>
 import List from '../components/List.vue';
+import SearchBox from '../components/SearchBox.vue';
+import { debounce } from '../lib/debounce.js';
 import { createSongSearchResults } from '../lib/songSearch.js';
-
-function debounce(fn, wait) {
-    let timeout;
-    return function debounced(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), wait);
-    };
-}
 
 export default {
     name: 'Search',
     components: {
         List,
+        SearchBox,
     },
     props: {
         query: {
@@ -110,7 +93,9 @@ export default {
         },
     },
     watch: {
-        $route() {
+        // The prop only follows the search route, so opening a song from
+        // the results no longer re-runs the whole search in the background.
+        query() {
             this.searchSongs();
         },
     },
@@ -118,21 +103,21 @@ export default {
         this.updateSearchUri = debounce(this.updateSearchUri, 300);
         this.searchSongs();
     },
+    deactivated() {
+        // A keystroke just before leaving must not pull the user back here
+        this.updateSearchUri.cancel();
+    },
     methods: {
-        onInput({ target: { value } }) {
+        onInput(value) {
             this.updateSearchUri(value.trim());
         },
         updateSearchUri(query) {
-            const location = query
-                ? { name: 'search', params: { query } }
-                : { name: 'search' };
+            if (this.$route.name !== 'search') return;
 
             // Replace while typing so history is not spammed per keystroke
-            if (this.$route.name === 'search') {
-                this.$router.replace(location);
-            } else {
-                this.$router.push(location);
-            }
+            this.$router.replace(
+                query ? { name: 'search', params: { query } } : { name: 'search' },
+            );
         },
         searchSongs() {
             const search = (this.query || '').trim();
@@ -162,51 +147,6 @@ export default {
 </script>
 
 <style lang="scss">
-.search-box {
-    display: grid;
-    grid-template-columns: 24px minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    min-height: 58px;
-    margin-bottom: 18px;
-    padding: 0 16px;
-    border: 1px solid var(--app-border);
-    border-radius: 17px;
-    color: var(--app-muted);
-    background: var(--app-surface);
-    box-shadow: var(--app-shadow-small);
-
-    &:focus-within {
-        border-color: var(--app-accent);
-        box-shadow: 0 0 0 3px var(--app-accent-soft);
-    }
-
-    svg {
-        width: 22px;
-        height: 22px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
-
-    input {
-        width: 100%;
-        min-height: 56px;
-        padding: 0;
-        border: 0;
-        outline: 0;
-        color: var(--app-text);
-        background: transparent;
-        font-size: 16px;
-
-        &::placeholder {
-            color: var(--app-muted);
-        }
-    }
-}
-
 .search-page {
     &__count {
         margin: -5px 4px 12px;
