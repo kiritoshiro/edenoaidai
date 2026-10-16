@@ -25,6 +25,22 @@ const MATCH_RANK = {
     content: 2,
 };
 
+// Turning lyrics HTML into text parses every song body, which is the
+// slowest part of a search. Bodies rarely change, so remember the text.
+const PLAIN_TEXT_CACHE_LIMIT = 5000;
+const plainTextCache = new Map();
+
+function plainLyrics(body) {
+    const html = String(body || '');
+    let text = plainTextCache.get(html);
+    if (text === undefined) {
+        if (plainTextCache.size >= PLAIN_TEXT_CACHE_LIMIT) plainTextCache.clear();
+        text = lyricsToPlainText(html);
+        plainTextCache.set(html, text);
+    }
+    return text;
+}
+
 function foldToken(value) {
     return Array.from(String(value || '').toLocaleLowerCase('lt-LT'))
         .map(character => LT_MAP[character] || character)
@@ -221,7 +237,7 @@ export function createSongSearchResults(songs, query, limit = 300) {
             ? numberPrefixMatch(song?.songId, search)
             : null;
         const title = songTitle(song);
-        const body = lyricsToPlainText(song?.body);
+        const body = plainLyrics(song?.body);
 
         // Numeric input is deliberately kept out of lyrics: verse numbers
         // would otherwise make almost every song look like a useful match.

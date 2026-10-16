@@ -5,21 +5,14 @@
             <p>Ieškokite pagal giesmės numerį, pavadinimą arba žodžius.</p>
         </header>
 
-        <div class="search-box">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-4-4" />
-            </svg>
-            <input
-                type="text"
-                placeholder="Giesmės numeris, pavadinimas ar žodžiai"
-                :value="query"
-                aria-label="Ieškoti giesmės"
-                @input="onInput"
-            />
-        </div>
+        <search-box v-model="draft" />
+        <p class="visually-hidden" role="status">{{ statusText }}</p>
 
-        <p v-if="query && results.length" class="search-page__count">
+        <p
+            v-if="query && results.length"
+            class="search-page__count"
+            aria-hidden="true"
+        >
             Rasta: {{ results.length }}
         </p>
 
@@ -61,20 +54,15 @@
 
 <script>
 import List from '../components/List.vue';
+import SearchBox from '../components/SearchBox.vue';
+import { debounce } from '../lib/debounce.js';
 import { createSongSearchResults } from '../lib/songSearch.js';
-
-function debounce(fn, wait) {
-    let timeout;
-    return function debounced(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), wait);
-    };
-}
 
 export default {
     name: 'Search',
     components: {
         List,
+        SearchBox,
     },
     props: {
         query: {
@@ -84,8 +72,13 @@ export default {
     },
     data() {
         return {
+            // What is in the box; the route catches up after a pause
+            draft: this.query,
+            // The route update we last sent, until its route change lands
+            sentQuery: null,
             results: [],
             searchRequestId: 0,
+            searchedAt: null,
         };
     },
     computed: {
@@ -108,33 +101,66 @@ export default {
                 this.results.map(result => [String(result.song.songId), result]),
             );
         },
+        statusText() {
+            if (!this.query) return '';
+            return this.results.length
+                ? `Rasta: ${this.results.length}`
+                : 'Giesmių nerasta';
+        },
     },
     watch: {
-        $route() {
+        // The prop only follows the search route, so opening a song from
+        // the results no longer re-runs the whole search in the background.
+        query(value) {
+            // Navigation from elsewhere (the navbar link, a pasted URL)
+            // replaces the box; our own route updates leave typing alone
+            if (value !== this.sentQuery && value !== this.draft.trim()) {
+                this.draft = value;
+            }
+            this.sentQuery = null;
             this.searchSongs();
+        },
+        draft(value) {
+            const query = value.trim();
+            if (query === this.query) {
+                this.updateSearchUri.cancel();
+            } else if (query) {
+                this.updateSearchUri(query);
+            } else {
+                // Clearing empties the results straight away
+                this.updateSearchUri.cancel();
+                this.replaceSearchUri('');
+            }
         },
     },
     created() {
-        this.updateSearchUri = debounce(this.updateSearchUri, 300);
+        this.updateSearchUri = debounce(this.replaceSearchUri, 300);
         this.searchSongs();
     },
+    activated() {
+        // A pending update cancelled on the way out leaves the box ahead
+        if (this.draft.trim() !== this.query) this.draft = this.query;
+        // The database may have been refreshed while this view was cached
+        if (this.searchedAt !== localStorage.getItem('lastInstall')) {
+            this.searchSongs();
+        }
+    },
+    deactivated() {
+        // A keystroke just before leaving must not pull the user back here
+        this.updateSearchUri.cancel();
+    },
     methods: {
-        onInput({ target: { value } }) {
-            this.updateSearchUri(value.trim());
-        },
-        updateSearchUri(query) {
-            const location = query
-                ? { name: 'search', params: { query } }
-                : { name: 'search' };
+        replaceSearchUri(query) {
+            if (this.$route.name !== 'search') return;
 
+            this.sentQuery = query;
             // Replace while typing so history is not spammed per keystroke
-            if (this.$route.name === 'search') {
-                this.$router.replace(location);
-            } else {
-                this.$router.push(location);
-            }
+            this.$router.replace(
+                query ? { name: 'search', params: { query } } : { name: 'search' },
+            );
         },
         searchSongs() {
+            this.searchedAt = localStorage.getItem('lastInstall');
             const search = (this.query || '').trim();
             const requestId = ++this.searchRequestId;
             if (!search) {
@@ -162,51 +188,6 @@ export default {
 </script>
 
 <style lang="scss">
-.search-box {
-    display: grid;
-    grid-template-columns: 24px minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    min-height: 58px;
-    margin-bottom: 18px;
-    padding: 0 16px;
-    border: 1px solid var(--app-border);
-    border-radius: 17px;
-    color: var(--app-muted);
-    background: var(--app-surface);
-    box-shadow: var(--app-shadow-small);
-
-    &:focus-within {
-        border-color: var(--app-accent);
-        box-shadow: 0 0 0 3px var(--app-accent-soft);
-    }
-
-    svg {
-        width: 22px;
-        height: 22px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
-
-    input {
-        width: 100%;
-        min-height: 56px;
-        padding: 0;
-        border: 0;
-        outline: 0;
-        color: var(--app-text);
-        background: transparent;
-        font-size: 16px;
-
-        &::placeholder {
-            color: var(--app-muted);
-        }
-    }
-}
-
 .search-page {
     &__count {
         margin: -5px 4px 12px;

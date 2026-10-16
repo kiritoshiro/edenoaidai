@@ -103,3 +103,22 @@ test('splits highlighted text without adding markup', () => {
         { text: 'o meilė', highlighted: false },
     ]);
 });
+
+test('returns every match when the limit is 0', () => {
+    const many = Array.from({ length: 5 }, (_, index) => ({
+        id: index + 1,
+        songId: String(index + 1),
+        title: `Giesmė ${index + 1}`,
+        body: '',
+    }));
+    assert.equal(createSongSearchResults(many, 'gies', 2).length, 2);
+    assert.equal(createSongSearchResults(many, 'gies', 0).length, 5);
+});
+
+test('finds a song again after its lyrics change', () => {
+    const song = { id: 1, songId: '1', title: 'Pirmoji', body: 'Senas tekstas' };
+    assert.equal(createSongSearchResults([song], 'senas').length, 1);
+    song.body = 'Naujas tekstas';
+    assert.equal(createSongSearchResults([song], 'senas').length, 0);
+    assert.equal(createSongSearchResults([song], 'naujas').length, 1);
+});
