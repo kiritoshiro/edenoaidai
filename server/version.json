@@ -1,9 +1,9 @@
 {
-  "sha": "7cfd908742649e1a44a92d90b2d4d06da2757f6a",
-  "shortSha": "7cfd908",
-  "branch": "review/code-security-2026-10-18",
-  "message": "ci: limit the weekly security scan to changing inputs (#12)",
-  "date": "2026-10-17T20:36:31+03:00",
-  "dirty": true,
-  "builtAt": "2026-10-17T22:22:46.088Z"
+  "sha": "ab5b00cca5acee132d4cb6ce2f23ec16096e4d65",
+  "shortSha": "ab5b00c",
+  "branch": "fix/offline-audio-range",
+  "message": "Cache offline audio despite Range requests",
+  "date": "2026-10-18T01:37:39+03:00",
+  "dirty": false,
+  "builtAt": "2026-10-17T22:37:49.637Z"
 }

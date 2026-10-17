@@ -9,7 +9,8 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkOnly, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
-import { RangeRequestsPlugin } from 'workbox-range-requests';
+import { createPartialResponse, RangeRequestsPlugin } from 'workbox-range-requests';
+import { createProgressiveDownload, knownLength } from './lib/audioRange.js';
 
 self.skipWaiting();
 clientsClaim();
@@ -33,6 +34,54 @@ registerRoute(
     new NetworkOnly(),
 );
 
+// <audio> always sends a Range header, and the server answers 206, which the
+// Cache API cannot store. So on a cache miss, fetch the whole file without
+// Range (a 200 that can be cached) and answer the player's ranges from that
+// download as it arrives. Ranges asked for while it is still running (e.g.
+// seeking during the first play) are answered from the same download, not
+// the network: Chrome stops playback when one media resource mixes
+// service-worker-built and network responses. Once the file is cached,
+// RangeRequestsPlugin slices it.
+const audioDownloads = new Map(); // url -> Promise<progressive download | null>
+const fullAudioDownloadPlugin = {
+    cachedResponseWillBeUsed: async ({ request, cachedResponse }) => {
+        const range = request.headers.get('range');
+        if (cachedResponse || !range || !audioDownloads.has(request.url)) {
+            return cachedResponse;
+        }
+        const download = await audioDownloads.get(request.url);
+        return download ? download.respond(range) : null;
+    },
+    requestWillFetch: async ({ request, state }) => {
+        if (!request.headers.has('range')) return request;
+        state.download = new Promise(resolve => (state.resolveDownload = resolve));
+        audioDownloads.set(request.url, state.download);
+        const headers = new Headers(request.headers);
+        headers.delete('range');
+        return new Request(request, { headers });
+    },
+    handlerWillRespond: async ({ request, response, state }) => {
+        const range = request.headers.get('range');
+        if (range && response?.status === 200) {
+            if (state.resolveDownload && knownLength(response)) {
+                const download = createProgressiveDownload(response);
+                state.resolveDownload(download);
+                return download.respond(range);
+            }
+            response = await createPartialResponse(request, response);
+        }
+        state.resolveDownload?.(null);
+        return response;
+    },
+    handlerDidComplete: async ({ request, state }) => {
+        if (!state.download) return;
+        state.resolveDownload(null);
+        if (audioDownloads.get(request.url) === state.download) {
+            audioDownloads.delete(request.url);
+        }
+    },
+};
+
 // Audio (mp3) – cache-first so hymns work offline.
 // The "Atnaujinti duomenis" flow deletes this cache to force fresh files.
 registerRoute(
@@ -41,6 +90,7 @@ registerRoute(
     new CacheFirst({
         cacheName: 'audio-v1',
         plugins: [
+            fullAudioDownloadPlugin,
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new RangeRequestsPlugin(),
             new ExpirationPlugin({
