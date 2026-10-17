@@ -108,11 +108,12 @@ function applied_version_record(): ?array
         'source' => 'self-update',
         'updateSource' => $data['source'] ?? null,
         'ref' => (string) $data['ref'],
+        'sha' => $data['sha'] ?? null,
         'appliedAt' => $data['appliedAt'] ?? null,
     ];
 }
 
-function record_applied_version(string $source, string $ref): void
+function record_applied_version(string $source, string $ref, string $sha): void
 {
     $storage = storage_dir();
     if (!is_dir($storage) && !mkdir($storage, 0775, true) && !is_dir($storage)) {
@@ -121,7 +122,7 @@ function record_applied_version(string $source, string $ref): void
     file_put_contents(
         $storage . '/last-update.json',
         json_encode(
-            ['source' => $source, 'ref' => $ref, 'appliedAt' => gmdate(DATE_ATOM)],
+            ['source' => $source, 'ref' => $ref, 'sha' => $sha, 'appliedAt' => gmdate(DATE_ATOM)],
             JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT,
         ),
     );
@@ -232,12 +233,22 @@ function assert_page(mixed $value): int
  */
 function svg_is_safe(string $svg): bool
 {
+    // The patterns only see UTF-8, so refuse UTF-16 and other encodings that
+    // a browser would decode differently.
+    if (str_starts_with($svg, "\xEF\xBB\xBF")) {
+        $svg = substr($svg, 3);
+    }
+    if (!mb_check_encoding($svg, 'UTF-8') || str_contains($svg, "\0")) {
+        return false;
+    }
     $variants = [$svg, html_entity_decode($svg, ENT_QUOTES | ENT_HTML5 | ENT_XML1, 'UTF-8')];
     foreach ($variants as $text) {
+        // Any namespace prefix, and on*= anywhere: a quoted ">" earlier in a
+        // tag would end a "<[^>]*" match before the handler.
         if (preg_match(
-            '/<\s*(?:[a-z0-9_-]+:)?(?:script|foreignobject|iframe|embed|object|handler|listener)\b'
+            '/<\s*(?:[^\s<>\/:]+:)?(?:script|foreignobject|iframe|embed|object|handler|listener)\b'
             . '|<!ENTITY'
-            . '|<[^>]*\son[a-z]+\s*='
+            . '|\son[a-z]+\s*='
             . '|j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:'
             . '|data\s*:\s*(?:text\/html|application\/(?:xhtml\+xml|javascript)|image\/svg)/i',
             $text,
@@ -261,12 +272,29 @@ function notes_file_name(string $songId, int $page, string $format): string
     return $page === 0 ? "$songId.$format" : "{$songId}_{$page}.$format";
 }
 
+// db.json asks for every song's note pages, so list each format folder once
+// per request instead of checking 9 file names per song.
+function note_file_index(string $format): array
+{
+    static $index = [];
+    if (!isset($index[$format])) {
+        $folder = files_dir() . "/notes/$format";
+        $index[$format] = [];
+        foreach (scandir($folder) ?: [] as $entry) {
+            if (is_file("$folder/$entry")) {
+                $index[$format][$entry] = true;
+            }
+        }
+    }
+    return $index[$format];
+}
+
 function note_pages_for_format(string $songId, string $format): array
 {
+    $files = note_file_index($format);
     $pages = [];
     for ($page = 0; $page <= 8; $page++) {
-        $file = notes_file_name($songId, $page, $format);
-        if (is_file(files_dir() . "/notes/$format/$file")) {
+        if (isset($files[notes_file_name($songId, $page, $format)])) {
             $pages[] = $page;
         }
     }
@@ -441,7 +469,31 @@ function clear_login_failures(string $ip): void
 
 // ─── Giesmių forma (DB eilutė <-> API) ───────────────────────────────
 
-function normalize_song_slides(mixed $value): array
+// Same rules as lyricsToPlainText() in frontend/src/lib/lyrics.js. Only
+// complete tags are removed: strip_tags() treats "<3" or "a<b" as the start
+// of a tag and drops the rest of the line.
+function slide_html_to_text(string $text): string
+{
+    $text = preg_replace('/<br\s*\/?>/i', "\n", $text) ?? '';
+    $text = preg_replace(
+        '/<\/(?:article|div|h[1-6]|li|p|section)>/i',
+        "\n",
+        $text,
+    ) ?? '';
+    do {
+        $previous = $text;
+        $text = preg_replace('/<[^>]*>/', '', $text) ?? '';
+    } while ($text !== $previous);
+    return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
+/**
+ * Slide text is stored as plain text. $fromHtml converts incoming text that
+ * may still carry markup (admin saves, imports). Stored rows are read back
+ * with $fromHtml = false: converting them again would decode a literal
+ * "&lt;" a second time and drop text after a lone "<".
+ */
+function normalize_song_slides(mixed $value, bool $fromHtml = true): array
 {
     if (!is_array($value) || !array_is_list($value)) {
         return [];
@@ -452,13 +504,10 @@ function normalize_song_slides(mixed $value): array
         if (!is_array($entry) || !is_string($entry['text'] ?? null)) {
             continue;
         }
-        $text = preg_replace('/<br\s*\/?>/i', "\n", $entry['text']) ?? '';
-        $text = preg_replace(
-            '/<\/(?:article|div|h[1-6]|li|p|section)>/i',
-            "\n",
-            $text,
-        ) ?? '';
-        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace(["\r\n", "\r"], "\n", $entry['text']);
+        if ($fromHtml) {
+            $text = slide_html_to_text($text);
+        }
         $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? '';
         $text = trim($text);
         if ($text === '') {
@@ -482,7 +531,7 @@ function decode_song_slides(mixed $value): array
         return [];
     }
     $decoded = json_decode($value, true);
-    return normalize_song_slides($decoded);
+    return normalize_song_slides($decoded, false);
 }
 
 function song_to_api(array $row, ?array $lists = null): array
@@ -494,7 +543,9 @@ function song_to_api(array $row, ?array $lists = null): array
         'verse' => $row['verse'] ?? '',
         'body' => $row['body'] ?? '',
         'slides' => decode_song_slides($row['slides_json'] ?? null),
-        'copyright' => $row['copyright'] ?? '',
+        // Also sanitized on output: rows written before the sanitizer existed
+        // would otherwise reach Single.vue's v-html unchanged.
+        'copyright' => sanitize_copyright_html((string) ($row['copyright'] ?? '')),
         'notePages' => $notePages,
     ];
     $pageCount = detected_note_page_count($notePages);

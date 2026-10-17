@@ -46,11 +46,7 @@ async function request(path, { method = 'GET', body } = {}) {
 
 const id = value => encodeURIComponent(value);
 
-async function downloadResponse(path, fallbackFilename) {
-    const response = await fetch(`${config.apiUrl}${bustCache(path)}`, {
-        credentials: 'include',
-    });
-
+async function saveDownload(response, fallbackFilename) {
     if (!response.ok) {
         let message = `Klaida (${response.status})`;
         try {
@@ -82,6 +78,13 @@ function mediaQuery(kind, values) {
     return query.toString();
 }
 
+async function downloadResponse(path, fallbackFilename) {
+    const response = await fetch(`${config.apiUrl}${bustCache(path)}`, {
+        credentials: 'include',
+    });
+    await saveDownload(response, fallbackFilename);
+}
+
 async function downloadPostResponse(path, body, fallbackFilename) {
     const response = await fetch(`${config.apiUrl}${path}`, {
         method: 'POST',
@@ -89,30 +92,7 @@ async function downloadPostResponse(path, body, fallbackFilename) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
     });
-
-    if (!response.ok) {
-        let message = `Klaida (${response.status})`;
-        try {
-            const data = await response.json();
-            if (data && data.error) message = data.error;
-        } catch {
-            /* not JSON */
-        }
-        throw new Error(message);
-    }
-
-    const blob = await response.blob();
-    const disposition = response.headers.get('Content-Disposition') || '';
-    const filename =
-        disposition.match(/filename="([^"]+)"/i)?.[1] || fallbackFilename;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    await saveDownload(response, fallbackFilename);
 }
 
 export const api = {
@@ -168,36 +148,8 @@ export const api = {
         form.append('file', file);
         return request('/api/import/db', { method: 'POST', body: form });
     },
-    exportDatabase: async () => {
-        const response = await fetch(`${config.apiUrl}${bustCache('/api/export/database')}`, {
-            credentials: 'include',
-        });
-
-        if (!response.ok) {
-            let message = `Klaida (${response.status})`;
-            try {
-                const data = await response.json();
-                if (data && data.error) message = data.error;
-            } catch {
-                /* not JSON */
-            }
-            throw new Error(message);
-        }
-
-        const blob = await response.blob();
-        const disposition = response.headers.get('Content-Disposition') || '';
-        const filename =
-            disposition.match(/filename="([^"]+)"/i)?.[1] ||
-            'edeno-aidai-database.json';
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    },
+    exportDatabase: () =>
+        downloadResponse('/api/export/database', 'edeno-aidai-database.json'),
     githubCurrent: () => request('/api/github/current'),
     githubCommits: () => request('/api/github/commits'),
     githubReleases: () => request('/api/github/releases'),

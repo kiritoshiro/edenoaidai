@@ -30,6 +30,17 @@ function stripTags(value) {
     return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// The inverse for plain-text slides: escape first, so text such as "<tave>"
+// stays text instead of becoming a tag in the stored body HTML.
+export function plainTextToLyricsHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\n/g, '<br>');
+}
+
 export function lyricsToPlainText(value) {
     const withoutMarkup = stripTags(String(value || '')
         .replace(/\r\n?/g, '\n')

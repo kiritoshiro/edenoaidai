@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { lyricsToPlainText } from './lyrics.js';
+import { lyricsToPlainText, plainTextToLyricsHtml } from './lyrics.js';
 
 test('turns line and block markup into newlines', () => {
     assert.equal(
@@ -33,4 +33,12 @@ test('line-break variants and CRLF become newlines', () => {
 
 test('empty input gives an empty string', () => {
     assert.equal(lyricsToPlainText(null), '');
+    assert.equal(plainTextToLyricsHtml(null), '');
+});
+
+test('plain text survives a trip through body HTML', () => {
+    assert.equal(plainTextToLyricsHtml('a <b>\r\nTom & Jerry'), 'a &lt;b&gt;<br>Tom &amp; Jerry');
+    for (const text of ['Mylim <tave> visada', '<3 tau', 'Tom & Jerry', '&lt;b&gt;x', 'a\nb']) {
+        assert.equal(lyricsToPlainText(plainTextToLyricsHtml(text)), text);
+    }
 });

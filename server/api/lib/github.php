@@ -350,9 +350,12 @@ function github_update(string $source, string $ref): array
         // (written at build time, so it can only ever name the *parent* of
         // whatever commit it ships in) this is written after the fact, so it
         // names the real deployed ref with no lag.
-        record_applied_version($source, $ref);
+        // A commit is recorded by its full SHA. A release keeps its tag for
+        // display, plus the SHA it pointed to at install time.
+        $recordedRef = $source === 'commit' ? $sha : $ref;
+        record_applied_version($source, $recordedRef, $sha);
 
-        return ['source' => $source, 'ref' => $ref];
+        return ['source' => $source, 'ref' => $recordedRef, 'sha' => $sha];
     } finally {
         github_remove_tree($work);
         flock($lock, LOCK_UN);
