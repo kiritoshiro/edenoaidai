@@ -1,9 +1,9 @@
 {
-  "sha": "c7adde6546173b6e703847bc8fc096c7b4871e7f",
-  "shortSha": "c7adde6",
-  "branch": "feature/song-list-search",
-  "message": "Address review of the home search bar",
-  "date": "2026-10-16T17:27:59+03:00",
+  "sha": "7cfd908742649e1a44a92d90b2d4d06da2757f6a",
+  "shortSha": "7cfd908",
+  "branch": "review/code-security-2026-10-18",
+  "message": "ci: limit the weekly security scan to changing inputs (#12)",
+  "date": "2026-10-17T20:36:31+03:00",
   "dirty": true,
-  "builtAt": "2026-10-16T14:31:40.371Z"
+  "builtAt": "2026-10-17T22:22:46.088Z"
 }

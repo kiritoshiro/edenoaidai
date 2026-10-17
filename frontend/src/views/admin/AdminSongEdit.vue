@@ -302,7 +302,7 @@
 <script>
 import { api } from '../../lib/api';
 import { config } from '../../lib/config';
-import { lyricsToPlainText } from '../../lib/lyrics';
+import { lyricsToPlainText, plainTextToLyricsHtml } from '../../lib/lyrics';
 
 // Saugykloje eilučių lūžiai laikomi kaip <br>, o redaktoriuje rodomi
 // kaip paprastos naujos eilutės (Enter). Konvertuojama abiem kryptimis.
@@ -310,17 +310,11 @@ function brToNewlines(value) {
     return lyricsToPlainText(value);
 }
 
-function newlinesToBr(value) {
-    return String(value || '')
-        .replace(/\r\n?/g, '\n')
-        .replace(/\n/g, '<br>');
-}
-
 function slidesToBody(slides) {
     const blocks = [];
 
     slides.forEach(slide => {
-        const lyrics = newlinesToBr(slide.text);
+        const lyrics = plainTextToLyricsHtml(slide.text);
         const previousBlock = blocks[blocks.length - 1];
         if (slide.isChorus && slide.chorusPart && previousBlock?.isChorus) {
             previousBlock.html += `<br><br>${lyrics}`;

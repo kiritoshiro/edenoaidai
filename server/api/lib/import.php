@@ -258,7 +258,9 @@ function backup_database(PDO $db, string $name): string
     if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
         throw new RuntimeException('Nepavyko sukurti atsarginių kopijų aplanko – importas nutrauktas');
     }
-    $stamp = str_replace([':', '.'], '-', date('Y-m-d\TH-i-s'));
+    // The random suffix keeps two imports in the same second from
+    // overwriting each other's pre-import snapshot.
+    $stamp = date('Y-m-d\TH-i-s') . '-' . bin2hex(random_bytes(3));
     $data = $name === 'db' ? build_database_export($db) : build_public_tracks($db);
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if ($json === false) {
