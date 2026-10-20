@@ -11,6 +11,13 @@
  * the next load fetches index.html from the network and the current app
  * registers `/sw.js`.
  *
+ * Safari before iOS 16 has WindowClient.navigate() but always rejects it, and
+ * the old app listens for no message or controllerchange event we could use
+ * to reload it instead. There the open old app keeps running until the next
+ * launch or reload, which then gets the current app from the network: the
+ * caches are gone, the registration is gone, and this worker has no fetch
+ * handler, so nothing can serve the old shell again.
+ *
  * Only registrations whose script URL is `/service-worker.js…` ever fetch this
  * file. The current app registers `/sw.js`, so its clients are never touched.
  * Do not register this file from the app, and do not delete it from the
@@ -22,8 +29,8 @@
 // scope), but these hold user downloads, so keep them if they exist anyway.
 const KEEP_CACHES = new Set(['audio-v1', 'notes-v1', 'icons-v1']);
 
-self.addEventListener('install', () => {
-    self.skipWaiting();
+self.addEventListener('install', event => {
+    event.waitUntil(self.skipWaiting());
 });
 
 async function retire() {
@@ -36,7 +43,8 @@ async function retire() {
 
     await self.registration.unregister();
 
-    // Only windows the old worker controlled are reloaded. This worker has no
+    // Only windows the old worker controlled are reloaded (not on iOS 15 and
+    // older, where navigate() rejects; see the top comment). This worker has no
     // fetch handler and the registration is gone, so the reload goes straight
     // to the network and gets the current index.html. There is no reload
     // loop: if a stale old page ever loads again and re-registers this file,

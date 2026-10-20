@@ -273,7 +273,10 @@ of the app installed on phones still do:
   browser's update check failed and the old worker stayed. `server/service-worker.js`
   (source: `frontend/public/service-worker.js`) is now a kill switch: the old
   worker's next update check installs it, and it deletes the old caches,
-  unregisters itself and reloads the app, which then registers `/sw.js`. It
+  unregisters itself and reloads the app, which then registers `/sw.js`. On
+  iOS 15 and older Safari cannot reload the open app from a service worker,
+  so the old app keeps running until the next launch or reload, which then
+  loads the current app from the network. It
   only works if the file is served as JavaScript and not cached for long
   (nginx no-cache location; purge Cloudflare after the first deploy). Keep it
   on the server until the old requests stop.
