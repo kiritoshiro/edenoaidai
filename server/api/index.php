@@ -621,6 +621,13 @@ if ($first === 'files' && count($segments) === 4) {
                 assert_safe_svg_file($file['tmp_name']);
                 save_upload($file, $target);
             } elseif (is_avif_file($file['tmp_name'])) {
+                try {
+                    assert_avif_page($file['tmp_name']);
+                } catch (InvalidArgumentException $e) {
+                    fail(400, $e->getMessage());
+                } catch (RuntimeException $e) {
+                    fail(500, $e->getMessage());
+                }
                 save_upload($file, $target);
             } else {
                 // JPG, PNG and WebP pages are converted, so the raster folder

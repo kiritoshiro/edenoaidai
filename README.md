@@ -211,11 +211,15 @@ server/files/notes/avif/<songId>_1.avif
 The first page has no suffix. Additional pages use `_1`, `_2`, and so on.
 Visitors see the two formats only as **#1** (SVG) and **#2** (AVIF); admin
 screens show both the number and the technical name. Browsers without AVIF
-support (Safari before iOS 16) are offered #1 only.
+support (Safari before iOS 16) are offered #1 only; a song with #2 pages only
+shows a short notice there.
 
-The AVIF upload slot also accepts JPG, PNG and WebP pages. The server converts
-them with PHP GD (`imageavif()`, quality 60), so PHP needs GD with AVIF
-support. nginx must serve `.avif` as `image/avif`: check with
+The AVIF upload slot stores an AVIF after GD has decoded it (no data after the
+image, at most 6000 px a side and 8 megapixels). It also accepts JPG, PNG and
+WebP pages, which the server converts with PHP GD (`imageavif()`, quality 60),
+so PHP needs GD with AVIF support. Media ZIP imports apply the same AVIF and
+SVG checks, unpack at most 5000 entries and 20× the archive size (4 GB at
+most), and replace files only after the whole archive has passed. nginx must serve `.avif` as `image/avif`: check with
 `curl -sI https://<site>/files/notes/avif/<page>.avif`, and add
 `image/avif avif;` to nginx's `mime.types` if it is missing.
 
@@ -235,10 +239,25 @@ for local folders), renders each SVG at 1181×1811 px (200 dpi) on white with
 headless Edge/Chrome, encodes AVIF quality 60 with PHP GD, and compares each
 page with its old JPG (mean grey difference; pages above `--threshold`, default
 12/255, are listed as outliers). Output in `notes-avif-out/`: `notes/avif/`,
-`report.csv` and `notes-avif.zip`. Restore the ZIP in Admin → Duomenų bazė →
-Natos with only the AVIF format ticked. A rerun keeps pages already in the
-output folder (`--force` re-renders them). Media ZIP archives made before the
-switch contain `notes/jpg/` pages, which the archive import skips and counts.
+`report.csv`, `sources.json` and `notes-avif.zip` (this run's pages only). A
+rerun keeps a page when its SVG and the encoder settings are unchanged and the
+file still decodes (`--force` re-renders everything). Media ZIP archives made
+before the switch contain `notes/jpg/` pages, which the archive import skips
+and counts.
+
+**Rollout order.** Put the AVIF pages on the server *before* deploying the
+code that switches to them. The JPG version of the app ignores
+`files/notes/avif/`, and installed apps that saved song data before the switch
+ask for #2 pages as soon as the new code runs. For example, as the site user:
+
+```bash
+cd /home/giesmynas2/public_html/files
+unzip -n /path/to/notes-avif.zip    # -n never overwrites
+```
+
+Later restores use Admin → Duomenų bazė → Natos with only the AVIF format
+ticked. If a #2 page is still missing, the viewer shows that song's #1 pages
+instead.
 ### Removing the old JPG pages
 
 The current application no longer reads `files/notes/jpg/`, but older copies

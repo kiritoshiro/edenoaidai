@@ -1,9 +1,9 @@
 {
-  "sha": "49cec7dfa84d64953cfc51a443476663075bfb26",
-  "shortSha": "49cec7d",
+  "sha": "b4efe8fc8903a27de2cbedecac3da20853718e0a",
+  "shortSha": "b4efe8f",
   "branch": "feature/avif-sheet-music",
-  "message": "Switch sheet-music raster pages from JPG to AVIF; label formats #1/#2",
-  "date": "2026-10-20T13:33:47+03:00",
+  "message": "Document when the old JPG sheet pages can be removed",
+  "date": "2026-10-20T13:47:56+03:00",
   "dirty": true,
-  "builtAt": "2026-10-20T10:44:30.709Z"
+  "builtAt": "2026-10-20T11:06:47.798Z"
 }

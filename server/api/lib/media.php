@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
-const MEDIA_ARCHIVE_MAX_ENTRIES = 100000;
+// Limits for one media archive import. The live library holds a few hundred
+// files per category and format; the byte budget is in media_import_budget().
+const MEDIA_ARCHIVE_MAX_ENTRIES = 5000;
+const MEDIA_ARCHIVE_MAX_TOTAL_BYTES = 4 * 1024 * 1024 * 1024;
+const MEDIA_ARCHIVE_MAX_EXPANSION = 20;
+const MEDIA_IMPORT_FREE_SPACE_RESERVE = 256 * 1024 * 1024;
 
 /**
  * Return the media choices shown in the administrator's backup screen.
@@ -366,13 +371,16 @@ function media_archive_song_id(string $filename, string $format): array
     return [$songId, $page];
 }
 
-function media_write_zip_entry(ZipArchive $zip, int $index, string $target, int $maxBytes): int
+/**
+ * Extract one archive entry to a temporary file next to $target. Bytes are
+ * counted as they are written, because the sizes a ZIP declares can be forged:
+ * the entry stops at $maxBytes, and the whole import at its $budget.
+ *
+ * @return string the temporary file
+ */
+function media_extract_zip_entry(ZipArchive $zip, int $index, string $target, int $maxBytes, int &$budget): string
 {
-    $stat = $zip->statIndex($index);
-    if (is_array($stat) && isset($stat['size']) && (int) $stat['size'] > $maxBytes) {
-        throw new InvalidArgumentException('Archyve esantis failas per didelis');
-    }
-    $stream = $zip->getStream($zip->getNameIndex($index));
+    $stream = $zip->getStream((string) $zip->getNameIndex($index));
     if ($stream === false) {
         throw new RuntimeException('Nepavyko perskaityti archyvo failo');
     }
@@ -382,24 +390,64 @@ function media_write_zip_entry(ZipArchive $zip, int $index, string $target, int 
         throw new RuntimeException('Nepavyko sukurti media aplanko');
     }
     $temporary = tempnam($dir, '.media-upload-');
-    if ($temporary === false) {
-        fclose($stream);
-        throw new RuntimeException('Nepavyko sukurti laikino media failo');
-    }
-    $output = fopen($temporary, 'wb');
+    $output = $temporary === false ? false : fopen($temporary, 'wb');
     if ($output === false) {
         fclose($stream);
-        @unlink($temporary);
-        throw new RuntimeException('Nepavyko įrašyti media failo');
+        if ($temporary !== false) {
+            @unlink($temporary);
+        }
+        throw new RuntimeException('Nepavyko sukurti laikino media failo');
     }
-    $bytes = stream_copy_to_stream($stream, $output);
+
+    $bytes = 0;
+    try {
+        while (!feof($stream)) {
+            $chunk = fread($stream, 1024 * 1024);
+            if ($chunk === false) {
+                throw new RuntimeException('Nepavyko perskaityti archyvo failo');
+            }
+            if ($chunk === '') {
+                break;
+            }
+            $bytes += strlen($chunk);
+            if ($bytes > $maxBytes) {
+                throw new InvalidArgumentException('Archyve esantis failas per didelis');
+            }
+            if ($bytes > $budget) {
+                throw new InvalidArgumentException('Išskleistas archyvas būtų per didelis');
+            }
+            if (fwrite($output, $chunk) !== strlen($chunk)) {
+                throw new RuntimeException('Nepavyko įrašyti media failo');
+            }
+        }
+        $stat = $zip->statIndex($index);
+        if (is_array($stat) && isset($stat['crc'])
+            && hash_file('crc32b', $temporary) !== sprintf('%08x', $stat['crc'])) {
+            throw new InvalidArgumentException('Archyve yra sugadintas failas');
+        }
+    } catch (Throwable $e) {
+        fclose($stream);
+        fclose($output);
+        @unlink($temporary);
+        throw $e;
+    }
     fclose($stream);
     fclose($output);
-    if ($bytes === false || $bytes > $maxBytes || !rename($temporary, $target)) {
-        @unlink($temporary);
-        throw new RuntimeException('Nepavyko išsaugoti media failo');
-    }
-    return (int) $bytes;
+    $budget -= $bytes;
+    return $temporary;
+}
+
+/**
+ * How many bytes one import may unpack. MP3, AVIF and SVG pages compress
+ * little or moderately, so a genuine archive unpacks to a small multiple of
+ * its own size; a ZIP bomb does not.
+ */
+function media_import_budget(int $archiveBytes): int
+{
+    return (int) min(
+        MEDIA_ARCHIVE_MAX_TOTAL_BYTES,
+        max(64 * 1024 * 1024, $archiveBytes * MEDIA_ARCHIVE_MAX_EXPANSION),
+    );
 }
 
 function media_import_archive(array $file, string $kind, array $selected): array
@@ -421,6 +469,9 @@ function media_import_archive(array $file, string $kind, array $selected): array
     $targets = [];
     $skipped = 0;
     $legacyJpg = 0;
+    $declaredBytes = 0;
+    $temporaries = [];
+    $budget = media_import_budget((int) @filesize((string) $file['tmp_name']));
     try {
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $name = $zip->getNameIndex($index);
@@ -476,38 +527,61 @@ function media_import_archive(array $file, string $kind, array $selected): array
                 $target = files_dir() . '/notes/' . $bucket . '/'
                     . notes_file_name($songId, $page, $bucket);
                 $maxBytes = 15 * 1024 * 1024;
-                // Checked here, before anything is written, so one bad SVG
-                // rejects the whole archive instead of half-importing it.
-                // Oversized entries are left to media_write_zip_entry(), which
-                // rejects them with the right message.
-                $stat = $zip->statIndex($index);
-                if ($bucket === 'svg' && (int) ($stat['size'] ?? 0) <= $maxBytes) {
-                    $svg = $zip->getFromIndex($index);
-                    if ($svg === false || !svg_is_safe($svg)) {
-                        throw new InvalidArgumentException(
-                            'Archyvo SVG faile ' . $filename . ' yra skriptų ar kito aktyvaus turinio',
-                        );
-                    }
-                }
-                if ($bucket === 'avif') {
-                    $head = $zip->getFromIndex($index, 64);
-                    if ($head === false || !is_avif_data($head)) {
-                        throw new InvalidArgumentException(
-                            'Archyvo failas ' . $filename . ' nėra AVIF paveikslėlis',
-                        );
-                    }
-                }
             }
             if (isset($targets[$target])) {
                 throw new InvalidArgumentException('Archyve kartojasi tas pats media failas');
             }
             $targets[$target] = true;
-            $entries[] = [$index, $target, $maxBytes];
+
+            // The declared sizes reject an honest oversized archive before
+            // anything is written; extraction counts the real bytes again.
+            $stat = $zip->statIndex($index);
+            $size = (int) ($stat['size'] ?? 0);
+            if ($size > $maxBytes) {
+                throw new InvalidArgumentException('Archyve esantis failas per didelis: ' . $filename);
+            }
+            $declaredBytes += $size;
+            $entries[] = [$index, $target, $maxBytes, $kind === 'notes' ? $bucket : '', $filename];
         }
-        foreach ($entries as [$index, $target, $maxBytes]) {
-            media_write_zip_entry($zip, $index, $target, $maxBytes);
+        if ($declaredBytes > $budget) {
+            throw new InvalidArgumentException('Išskleistas archyvas būtų per didelis');
+        }
+        $free = @disk_free_space(files_dir());
+        if ($free !== false && $declaredBytes + MEDIA_IMPORT_FREE_SPACE_RESERVE > $free) {
+            throw new RuntimeException('Serveryje neužtenka vietos šiam archyvui');
+        }
+
+        // Everything is unpacked and checked before any file is replaced, so
+        // one bad entry rejects the whole archive.
+        foreach ($entries as [$index, $target, $maxBytes, $format, $filename]) {
+            set_time_limit(120);
+            $temporary = media_extract_zip_entry($zip, $index, $target, $maxBytes, $budget);
+            $temporaries[$temporary] = $target;
+            if ($format === 'svg' && !svg_is_safe((string) file_get_contents($temporary))) {
+                throw new InvalidArgumentException(
+                    'Archyvo SVG faile ' . $filename . ' yra skriptų ar kito aktyvaus turinio',
+                );
+            }
+            if ($format === 'avif') {
+                try {
+                    assert_avif_page($temporary);
+                } catch (InvalidArgumentException $e) {
+                    throw new InvalidArgumentException(
+                        'Archyvo failas ' . $filename . ': ' . $e->getMessage(),
+                    );
+                }
+            }
+        }
+        foreach ($temporaries as $temporary => $target) {
+            if (!rename($temporary, $target)) {
+                throw new RuntimeException('Nepavyko išsaugoti media failo');
+            }
+            unset($temporaries[$temporary]);
         }
     } finally {
+        foreach (array_keys($temporaries) as $temporary) {
+            @unlink($temporary);
+        }
         $zip->close();
     }
 

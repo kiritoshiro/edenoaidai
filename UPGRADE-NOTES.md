@@ -35,9 +35,13 @@ deploying the application.
   read or listed, and there is no JPG fallback; SVG stays as the other format.
 - Visitors see the formats as #1 (SVG) and #2 (AVIF).
 - The AVIF pages are rendered from the SVG pages on a desktop with
-  `scripts/notes-avif/render-notes-avif.mjs` and restored through the admin
-  media import (see README, "Making the AVIF pages from the SVGs"). Until they
-  are imported, songs show only #1.
+  `scripts/notes-avif/render-notes-avif.mjs` (see README, "Making the AVIF
+  pages from the SVGs"). Put them in `files/notes/avif/` on the server
+  **before** deploying this version: installed apps with saved song data ask
+  for #2 pages straight away. A #2 page that is still missing falls back to
+  #1 in the viewer.
+- Browsers without AVIF support (Safari before iOS 16) are offered #1 only. A
+  song with #2 pages only shows a short notice instead of sheet music.
 - Installed apps keep working with their saved data: a saved `jpg` page list is
   read as the matching AVIF pages, and a remembered JPG choice becomes #2.
 - Keep `files/notes/jpg/` until old installed app versions stop asking for it,

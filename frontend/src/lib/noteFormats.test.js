@@ -6,6 +6,7 @@ import {
     normalizeNoteFormat,
     noteFormatLabel,
     notePageIndexes,
+    notesNeedAvif,
     noteUploadAccept,
     parseNotesFilename,
 } from './noteFormats.js';
@@ -52,11 +53,24 @@ test('very old snapshots with only a page count offer both formats', () => {
     assert.deepEqual(availableNoteFormats({}), []);
 });
 
-test('without AVIF support only SVG is offered, if the song has it', () => {
+test('without AVIF support #2 is never offered', () => {
     const both = { notePages: { svg: [0], avif: [0] } };
     assert.deepEqual(availableNoteFormats(both, false), ['svg']);
+    assert.equal(notesNeedAvif(both, false), false);
+
     const avifOnly = { notePages: { svg: [], avif: [0] } };
-    assert.deepEqual(availableNoteFormats(avifOnly, false), ['avif']);
+    assert.deepEqual(availableNoteFormats(avifOnly, false), []);
+    assert.equal(notesNeedAvif(avifOnly, false), true);
+    assert.equal(notesNeedAvif(avifOnly, true), false);
+
+    // Saved snapshots from before the switch read their JPG list as #2.
+    const oldSnapshot = { notePages: { svg: [], jpg: [0] } };
+    assert.deepEqual(availableNoteFormats(oldSnapshot, false), []);
+    assert.equal(notesNeedAvif(oldSnapshot, false), true);
+
+    const legacyCount = { pages: 2 };
+    assert.deepEqual(availableNoteFormats(legacyCount, false), ['svg']);
+    assert.equal(notesNeedAvif({ notePages: { svg: [], avif: [] } }, false), false);
 });
 
 test('the AVIF folder accepts images the server converts', () => {

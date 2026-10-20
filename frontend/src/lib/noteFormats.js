@@ -47,11 +47,22 @@ export function availableNoteFormats(song, avifSupported = true) {
         // Compatibility with data cached by older installed versions.
         formats = Number(song?.pages) > 0 ? [...NOTE_FORMATS] : [];
     }
-    // Browsers without AVIF (Safari before iOS 16) fall back to SVG.
-    if (!avifSupported && formats.includes('svg')) {
+    // Browsers without AVIF (Safari before iOS 16) are offered #1 only; a
+    // song with #2 pages only then has no notes to show (see notesNeedAvif).
+    if (!avifSupported) {
         formats = formats.filter(format => format !== 'avif');
     }
     return formats;
+}
+
+// True when the song has sheet music, but only in a format this browser
+// cannot show.
+export function notesNeedAvif(song, avifSupported) {
+    return (
+        !avifSupported &&
+        availableNoteFormats(song, true).length > 0 &&
+        availableNoteFormats(song, false).length === 0
+    );
 }
 
 export function notePageIndexes(song, format) {

@@ -7,11 +7,14 @@
 //      Edge/Chrome, which draws these SVGs correctly,
 //   3. encodes it as AVIF with PHP GD (scripts/notes-avif/encode-avif.php),
 //   4. compares the AVIF with the page's existing JPG and lists outliers,
-//   5. writes <out>/notes/avif/*.avif, report.csv and notes-avif.zip; the
-//      ZIP can be restored in Admin → Duomenų bazė → Natos (format AVIF).
+//   5. writes <out>/notes/avif/*.avif, report.csv and notes-avif.zip with
+//      this run's pages. Copy notes/avif/ to the server's files/notes/avif/
+//      before deploying the AVIF switch; later the ZIP can be restored in
+//      Admin → Duomenų bazė → Natos (format AVIF).
 //
-// Existing files in <out> are kept (rerun to finish an interrupted run) unless
-// --force is given. Nothing is uploaded or changed on the server.
+// A page already in <out> is kept when its SVG and the encoder settings are
+// unchanged (sources.json) and the file still decodes; --force re-renders
+// everything. Nothing is uploaded or changed on the server.
 //
 //   node scripts/notes-avif/render-notes-avif.mjs [options]
 //     --site=URL        site to read db.json and files from
@@ -30,16 +33,17 @@
 //     --force           re-render pages that already exist in <out>
 
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { crc32 } from 'node:zlib';
+
+import { insideDir, naturalCompare, pagesFromDb, songIdOf, storedZip } from './lib.mjs';
 
 const WIDTH = 1181;
 const HEIGHT = 1811;
-const SONG_ID_RE = /^[A-Za-z0-9 _-]{1,20}$/;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BROWSERS = [
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
@@ -73,7 +77,7 @@ function parseArgs(argv) {
         const [, key, value = ''] = match;
         const name = key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
         if (name === 'help') {
-            console.log(readHelp());
+            console.log(`See the comment at the top of ${fileURLToPath(import.meta.url)}.`);
             process.exit(0);
         } else if (name === 'force') {
             options.force = true;
@@ -94,65 +98,34 @@ function parseArgs(argv) {
     return options;
 }
 
-function readHelp() {
-    return `See the comment at the top of ${path.relative(process.cwd(), fileURLToPath(import.meta.url))}.`;
-}
-
-// "<songId>" is page 0, "<songId>_<n>" page n (1–8), as on the server.
-function songIdOf(base) {
-    const match = base.match(/^(.+?)(?:_([1-8]))?$/u);
-    return match && SONG_ID_RE.test(match[1]) ? match[1] : null;
-}
-
 async function listPages(options) {
-    const pages = [];
-    const jpgWithoutSvg = [];
+    let result;
     if (options.svgDir) {
+        result = { pages: [], invalid: [], jpgWithoutSvg: [] };
         for (const name of (await readdir(options.svgDir)).sort(naturalCompare)) {
             if (!/\.svg$/i.test(name)) continue;
             const base = name.replace(/\.svg$/i, '');
+            const songId = songIdOf(base);
+            if (!songId) {
+                result.invalid.push(name);
+                continue;
+            }
             const jpgFile = options.jpgDir ? path.join(options.jpgDir, `${base}.jpg`) : '';
-            pages.push({
+            result.pages.push({
                 base,
-                songId: songIdOf(base),
+                songId,
                 svg: { file: path.join(options.svgDir, name) },
                 jpg: jpgFile && existsSync(jpgFile) ? { file: jpgFile } : null,
             });
         }
     } else {
-        const response = await fetchWithRetry(`${options.site}/api/public/db.json`);
-        const songs = await response.json();
+        const songs = await (await fetchWithRetry(`${options.site}/api/public/db.json`)).json();
         // ?fresh= skips Cloudflare's 7-day /files/ cache, so pages fixed on
         // the server recently are read as they are now.
-        const fresh = `?fresh=${Date.now()}`;
-        for (const song of Array.isArray(songs) ? songs : songs.songs || []) {
-            const notePages = song.notePages || {};
-            const svgPages = notePages.svg || [];
-            const jpgPages = notePages.jpg || [];
-            const baseOf = page => (page === 0 ? song.songId : `${song.songId}_${page}`);
-            const url = (format, page) =>
-                `${options.site}/files/notes/${format}/${encodeURIComponent(baseOf(page))}.${format}${fresh}`;
-            for (const page of svgPages) {
-                pages.push({
-                    base: baseOf(page),
-                    songId: SONG_ID_RE.test(song.songId) ? song.songId : null,
-                    svg: { url: url('svg', page) },
-                    // Tried even when db.json no longer lists JPG pages (after
-                    // the AVIF switch is deployed): the files stay until deleted.
-                    jpg: { url: url('jpg', page) },
-                });
-            }
-            for (const page of jpgPages) {
-                if (!svgPages.includes(page)) jpgWithoutSvg.push(`${baseOf(page)}.jpg`);
-            }
-        }
+        result = pagesFromDb(Array.isArray(songs) ? songs : songs?.songs, options.site, `?fresh=${Date.now()}`);
     }
-    const selected = pages.filter(page => !options.only || options.only.has(page.songId));
-    return { pages: selected, jpgWithoutSvg };
-}
-
-function naturalCompare(a, b) {
-    return a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' });
+    result.pages = result.pages.filter(page => !options.only || options.only.has(page.songId));
+    return result;
 }
 
 async function fetchWithRetry(url) {
@@ -177,6 +150,7 @@ async function readSource(source) {
 }
 
 const dataUrl = (type, bytes) => `data:${type};base64,${bytes.toString('base64')}`;
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // ─── Headless browser over the DevTools protocol ─────────────────────
 
@@ -208,6 +182,14 @@ class Cdp {
         this.socket.send(JSON.stringify({ id, method, params, sessionId }));
         return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
     }
+
+    close() {
+        try {
+            this.socket.close();
+        } catch {
+            // already closed
+        }
+    }
 }
 
 const PAGE_HELPERS = `
@@ -231,6 +213,10 @@ window.drawPage = (image, width, height) => {
 };
 window.renderSvg = async (url, width, height) =>
     drawPage(await loadImage(url, width, height), width, height).canvas.toDataURL('image/png');
+window.imageSize = async url => {
+    const image = await loadImage(url);
+    return { width: image.naturalWidth, height: image.naturalHeight };
+};
 // Grey-level difference: mean (0–255), squared error, and the share of
 // pixels off by more than half the range (ink present in one, not the other).
 window.comparePages = async (aUrl, bUrl, width, height) => {
@@ -252,58 +238,73 @@ true;`;
 
 async function launchBrowser(executable) {
     const profile = await mkdtemp(path.join(tmpdir(), 'notes-avif-browser-'));
-    const child = spawn(
-        executable,
-        [
-            '--headless=new',
-            '--disable-gpu',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-extensions',
-            '--remote-debugging-port=0',
-            `--user-data-dir=${profile}`,
-            'about:blank',
-        ],
-        { stdio: 'ignore' },
-    );
-    const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 150 && !existsSync(portFile); i++) await sleep(100);
-    if (!existsSync(portFile)) throw new Error(`The browser did not start: ${executable}`);
-    const [port, wsPath] = (await readFile(portFile, 'utf8')).split('\n');
-    const cdp = await Cdp.connect(`ws://127.0.0.1:${port.trim()}${wsPath.trim()}`);
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-
-    const evaluate = async expression => {
-        const result = await cdp.send(
-            'Runtime.evaluate',
-            { expression, awaitPromise: true, returnByValue: true },
-            sessionId,
-        );
-        if (result.exceptionDetails) {
-            throw new Error(
-                result.exceptionDetails.exception?.description || result.exceptionDetails.text,
-            );
+    let child;
+    let cdp;
+    const cleanup = async () => {
+        if (cdp) {
+            await Promise.race([cdp.send('Browser.close').catch(() => {}), sleep(2000)]);
+            cdp.close();
         }
-        return result.result.value;
+        if (child && child.exitCode === null) child.kill();
+        await sleep(500);
+        await rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {});
     };
-    await evaluate(PAGE_HELPERS);
+    try {
+        child = spawn(
+            executable,
+            [
+                '--headless=new',
+                '--disable-gpu',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-extensions',
+                '--remote-debugging-port=0',
+                `--user-data-dir=${profile}`,
+                'about:blank',
+            ],
+            { stdio: 'ignore' },
+        );
+        const started = new Promise((_, reject) => child.once('error', reject));
+        started.catch(() => {});
+        const portFile = path.join(profile, 'DevToolsActivePort');
+        for (let i = 0; i < 150 && !existsSync(portFile); i++) {
+            await Promise.race([sleep(100), started]);
+        }
+        if (!existsSync(portFile)) throw new Error(`The browser did not start: ${executable}`);
+        const [port, wsPath] = (await readFile(portFile, 'utf8')).split('\n');
+        cdp = await Cdp.connect(`ws://127.0.0.1:${port.trim()}${wsPath.trim()}`);
+        const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+        const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
 
-    return {
-        render: svgUrl =>
-            evaluate(`renderSvg(${JSON.stringify(svgUrl)}, ${WIDTH}, ${HEIGHT})`),
-        compare: (aUrl, bUrl) =>
-            evaluate(`comparePages(${JSON.stringify(aUrl)}, ${JSON.stringify(bUrl)}, ${WIDTH}, ${HEIGHT})`),
-        async close() {
-            await cdp.send('Browser.close').catch(() => {});
-            child.kill();
-            await sleep(500);
-            await rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {});
-        },
-    };
+        const evaluate = async expression => {
+            const result = await cdp.send(
+                'Runtime.evaluate',
+                { expression, awaitPromise: true, returnByValue: true },
+                sessionId,
+            );
+            if (result.exceptionDetails) {
+                throw new Error(
+                    result.exceptionDetails.exception?.description || result.exceptionDetails.text,
+                );
+            }
+            return result.result.value;
+        };
+        await evaluate(PAGE_HELPERS);
+
+        return {
+            render: svgUrl => evaluate(`renderSvg(${JSON.stringify(svgUrl)}, ${WIDTH}, ${HEIGHT})`),
+            size: url => evaluate(`imageSize(${JSON.stringify(url)})`),
+            compare: (aUrl, bUrl) =>
+                evaluate(`comparePages(${JSON.stringify(aUrl)}, ${JSON.stringify(bUrl)}, ${WIDTH}, ${HEIGHT})`),
+            close: cleanup,
+        };
+    } catch (error) {
+        await cleanup();
+        throw error;
+    }
 }
 
-// ─── Encoding, ZIP ───────────────────────────────────────────────────
+// ─── Encoding ────────────────────────────────────────────────────────
 
 function encodeAvif(options, pngFile, avifFile) {
     return new Promise((resolve, reject) => {
@@ -327,80 +328,54 @@ function encodeAvif(options, pngFile, avifFile) {
     });
 }
 
-// A store-only ZIP (AVIF is already compressed) in the layout the admin
-// media import expects: notes/avif/<file>.avif.
-function storedZip(entries) {
-    const parts = [];
-    const central = [];
-    let offset = 0;
-    for (const { name, data } of entries) {
-        const nameBytes = Buffer.from(name, 'utf8');
-        const crc = crc32(data);
-        const local = Buffer.alloc(30);
-        local.writeUInt32LE(0x04034b50, 0);
-        local.writeUInt16LE(20, 4);
-        local.writeUInt16LE(0x0800, 6); // UTF-8 names
-        local.writeUInt16LE(0x21, 12); // 1980-01-01
-        local.writeUInt32LE(crc, 14);
-        local.writeUInt32LE(data.length, 18);
-        local.writeUInt32LE(data.length, 22);
-        local.writeUInt16LE(nameBytes.length, 26);
-        parts.push(local, nameBytes, data);
-
-        const header = Buffer.alloc(46);
-        header.writeUInt32LE(0x02014b50, 0);
-        header.writeUInt16LE(20, 4);
-        header.writeUInt16LE(20, 6);
-        header.writeUInt16LE(0x0800, 8);
-        header.writeUInt16LE(0x21, 14);
-        header.writeUInt32LE(crc, 16);
-        header.writeUInt32LE(data.length, 20);
-        header.writeUInt32LE(data.length, 24);
-        header.writeUInt16LE(nameBytes.length, 28);
-        header.writeUInt32LE(offset, 42);
-        central.push(header, nameBytes);
-        offset += local.length + nameBytes.length + data.length;
-    }
-    const centralSize = central.reduce((total, part) => total + part.length, 0);
-    const end = Buffer.alloc(22);
-    end.writeUInt32LE(0x06054b50, 0);
-    end.writeUInt16LE(entries.length, 8);
-    end.writeUInt16LE(entries.length, 10);
-    end.writeUInt32LE(centralSize, 12);
-    end.writeUInt32LE(offset, 16);
-    return Buffer.concat([...parts, ...central, end]);
-}
-
 // ─── Main ────────────────────────────────────────────────────────────
 
-async function processPage(options, browser, page, folders) {
-    const avifFile = path.join(folders.avif, `${page.base}.avif`);
-    const row = { file: `${page.base}.avif`, status: 'rendered' };
-    let svgBytes;
-    if (!options.force && existsSync(avifFile)) {
+async function keptFileIsUsable(browser, avifFile) {
+    try {
+        const size = await browser.size(dataUrl('image/avif', await readFile(avifFile)));
+        return size.width === WIDTH && size.height === HEIGHT;
+    } catch {
+        return false;
+    }
+}
+
+async function processPage(options, browser, page, folders, sources) {
+    const file = `${page.base}.avif`;
+    const avifFile = insideDir(folders.avif, file);
+    const row = { file, status: 'rendered' };
+    const svgBytes = await readSource(page.svg);
+    row.svgBytes = svgBytes.length;
+    // The SVG and the encoder settings an AVIF was made from: a page is kept
+    // only while both are unchanged and the file still decodes.
+    const source = `${sha256(svgBytes)} q${options.quality} s${options.speed}`;
+
+    if (
+        !options.force &&
+        existsSync(avifFile) &&
+        sources[page.base] === source &&
+        (await keptFileIsUsable(browser, avifFile))
+    ) {
         row.status = 'kept';
     } else {
-        svgBytes = await readSource(page.svg);
         const png = await browser.render(dataUrl('image/svg+xml', svgBytes));
-        const pngFile = path.join(folders.work, `${page.base}.png`);
+        const pngFile = insideDir(folders.work, `${page.base}.png`);
+        const partial = insideDir(folders.avif, `${file}.new`);
         await writeFile(pngFile, Buffer.from(png.split(',')[1], 'base64'));
         try {
-            const partial = `${avifFile}.new`;
             await encodeAvif(options, pngFile, partial);
             await rename(partial, avifFile);
             const loss = await browser.compare(png, dataUrl('image/avif', await readFile(avifFile)));
             row.psnr = loss.mse > 0 ? 10 * Math.log10((255 * 255) / loss.mse) : Infinity;
         } finally {
             await unlink(pngFile).catch(() => {});
+            await unlink(partial).catch(() => {});
         }
-        row.svgBytes = svgBytes.length;
+        sources[page.base] = source;
     }
     row.avifBytes = (await stat(avifFile)).size;
-    let jpgBytes = null;
-    if (page.jpg) {
-        jpgBytes = await readSource(page.jpg).catch(() => null);
-        if (!jpgBytes) row.status += ', no JPG to compare';
-    }
+
+    const jpgBytes = page.jpg ? await readSource(page.jpg).catch(() => null) : null;
+    if (page.jpg && !jpgBytes) row.status += ', no JPG to compare';
     if (jpgBytes) {
         const avifUrl = dataUrl('image/avif', await readFile(avifFile));
         const difference = await browser.compare(avifUrl, dataUrl('image/jpeg', jpgBytes));
@@ -418,34 +393,55 @@ const fixed = (value, digits) => (value == null ? '' : Number(value).toFixed(dig
 async function main() {
     const options = parseArgs(process.argv.slice(2));
     const folders = {
-        avif: path.join(options.out, 'notes', 'avif'),
-        work: path.join(options.out, '.work'),
+        avif: path.resolve(options.out, 'notes', 'avif'),
+        work: path.resolve(options.out, '.work'),
     };
     await mkdir(folders.avif, { recursive: true });
     await mkdir(folders.work, { recursive: true });
+    const sourcesFile = path.resolve(options.out, 'sources.json');
+    const sources = existsSync(sourcesFile) ? JSON.parse(await readFile(sourcesFile, 'utf8')) : {};
+    let sourcesSaving = Promise.resolve();
+    const saveSources = () => {
+        sourcesSaving = sourcesSaving.then(async () => {
+            await writeFile(`${sourcesFile}.new`, JSON.stringify(sources, null, 1));
+            await rename(`${sourcesFile}.new`, sourcesFile);
+        });
+        return sourcesSaving;
+    };
 
-    const { pages, jpgWithoutSvg } = await listPages(options);
-    const invalid = pages.filter(page => !page.songId);
-    const valid = pages.filter(page => page.songId);
+    const { pages, invalid, jpgWithoutSvg } = await listPages(options);
     console.log(
-        `${valid.length} SVG pages from ${options.svgDir || options.site}; ` +
+        `${pages.length} SVG pages from ${options.svgDir || options.site}; ` +
             `quality ${options.quality}, speed ${options.speed}, ${options.jobs} jobs; ` +
             `browser ${path.basename(options.browser)}`,
     );
 
     const browser = await launchBrowser(options.browser);
+    let stopping = false;
+    const stop = signal => {
+        if (stopping) return;
+        stopping = true;
+        console.log(`\n${signal}: stopping; finished pages are kept for the next run.`);
+        Promise.allSettled([saveSources(), browser.close()])
+            .then(() => rm(folders.work, { recursive: true, force: true }).catch(() => {}))
+            .finally(() => process.exit(130));
+    };
+    process.once('SIGINT', () => stop('SIGINT'));
+    process.once('SIGTERM', () => stop('SIGTERM'));
+
     const rows = [];
     const failures = [];
     let next = 0;
     let done = 0;
     const worker = async () => {
-        while (next < valid.length) {
-            const page = valid[next++];
+        while (!stopping && next < pages.length) {
+            const page = pages[next++];
             try {
-                const row = await processPage(options, browser, page, folders);
+                const row = await processPage(options, browser, page, folders, sources);
                 rows.push(row);
+                if (row.status === 'rendered') await saveSources();
                 console.log(
-                    `[${++done}/${valid.length}] ${row.file}: ${row.status}, ` +
+                    `[${++done}/${pages.length}] ${row.file}: ${row.status}, ` +
                         `${kb(row.jpgBytes) || '–'} KB JPG → ${kb(row.avifBytes)} KB AVIF` +
                         (row.diff == null ? '' : `, diff vs JPG ${row.diff.toFixed(2)}`) +
                         (row.psnr == null ? '' : `, ${row.psnr.toFixed(1)} dB vs render`),
@@ -453,16 +449,18 @@ async function main() {
             } catch (error) {
                 done++;
                 failures.push(`${page.base}: ${error.message}`);
-                console.log(`[${done}/${valid.length}] ${page.base}: ERROR ${error.message}`);
+                console.log(`[${done}/${pages.length}] ${page.base}: ERROR ${error.message}`);
             }
         }
     };
     try {
         await Promise.all(Array.from({ length: Math.max(1, options.jobs) }, worker));
     } finally {
+        await saveSources();
         await browser.close();
         await rm(folders.work, { recursive: true, force: true }).catch(() => {});
     }
+    if (stopping) return;
 
     rows.sort((a, b) => naturalCompare(a.file, b.file));
     const csv = [
@@ -470,7 +468,7 @@ async function main() {
         ...rows.map(row =>
             [
                 JSON.stringify(row.file),
-                row.status,
+                JSON.stringify(row.status),
                 row.svgBytes ?? '',
                 row.jpgBytes ?? '',
                 row.avifBytes,
@@ -480,14 +478,21 @@ async function main() {
             ].join(','),
         ),
     ];
-    await writeFile(path.join(options.out, 'report.csv'), `${csv.join('\n')}\n`);
+    await writeFile(path.resolve(options.out, 'report.csv'), `${csv.join('\n')}\n`);
 
-    const avifNames = (await readdir(folders.avif)).filter(name => name.endsWith('.avif')).sort(naturalCompare);
+    // Only this run's pages: older files in the folder from other --only runs
+    // or pages no longer listed are not packed.
     const entries = [];
-    for (const name of avifNames) {
-        entries.push({ name: `notes/avif/${name}`, data: await readFile(path.join(folders.avif, name)) });
+    for (const row of rows) {
+        entries.push({
+            name: `notes/avif/${row.file}`,
+            data: await readFile(insideDir(folders.avif, row.file)),
+        });
     }
-    await writeFile(path.join(options.out, 'notes-avif.zip'), storedZip(entries));
+    await writeFile(path.resolve(options.out, 'notes-avif.zip'), storedZip(entries));
+    const stray = (await readdir(folders.avif)).filter(
+        name => name.endsWith('.avif') && !rows.some(row => row.file === name),
+    );
 
     const compared = rows.filter(row => row.diff != null);
     const outliers = compared
@@ -499,7 +504,9 @@ async function main() {
     const psnrs = rows.filter(row => row.psnr != null).map(row => row.psnr).sort((a, b) => a - b);
 
     console.log('');
-    console.log(`AVIF pages: ${rows.length} (${rows.filter(row => row.status === 'kept').length} kept from an earlier run)`);
+    console.log(
+        `AVIF pages: ${rows.length} (${rows.filter(row => row.status.startsWith('kept')).length} kept from an earlier run)`,
+    );
     if (compared.length) {
         console.log(
             `Compared with JPG: ${compared.length}; ${mb(jpgTotal)} MB JPG → ${mb(avifTotal)} MB AVIF ` +
@@ -523,11 +530,16 @@ async function main() {
         console.log(`JPG pages without an SVG (no AVIF made): ${jpgWithoutSvg.join(', ')}`);
     }
     if (invalid.length) {
-        console.log(`Skipped, not a sheet-music file name: ${invalid.map(page => page.base).join(', ')}`);
+        console.log(`Skipped, not a valid song ID or page: ${invalid.join(', ')}`);
+    }
+    if (stray.length) {
+        console.log(`Not in this run (left in the folder, not in the ZIP): ${stray.length} file(s)`);
     }
     console.log(`Failures: ${failures.length}`);
     for (const failure of failures) console.log(`  ${failure}`);
-    console.log(`Output: ${path.resolve(options.out)} (notes/avif/, report.csv, notes-avif.zip)`);
+    console.log(
+        `Output: ${path.resolve(options.out)} (notes/avif/, report.csv, notes-avif.zip with ${entries.length} pages)`,
+    );
     process.exitCode = failures.length ? 1 : 0;
 }
 
