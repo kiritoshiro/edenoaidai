@@ -450,7 +450,64 @@ function media_import_budget(int $archiveBytes): int
     );
 }
 
-function media_import_archive(array $file, string $kind, array $selected): array
+/**
+ * Move unpacked files into place all-or-nothing. Each existing target is
+ * moved aside first; if any step fails, every target is put back as it was
+ * (replaced files restored, new files removed) before the error is passed on.
+ * A backup that cannot be restored is kept, and its path is reported.
+ *
+ * @param array<string, string> $temporaries temporary file => target
+ * @param ?callable(string, string): bool $rename rename(); tests inject failures
+ */
+function media_install_files(array $temporaries, ?callable $rename = null): void
+{
+    $rename ??= 'rename';
+    $journal = [];
+    try {
+        foreach ($temporaries as $temporary => $target) {
+            $backup = null;
+            if (file_exists($target)) {
+                $backup = tempnam(dirname($target), '.media-backup-');
+                if ($backup === false || !@$rename($target, $backup)) {
+                    if ($backup !== false) {
+                        @unlink($backup);
+                    }
+                    throw new RuntimeException('Nepavyko išsaugoti media failo');
+                }
+            }
+            $journal[] = [$target, $backup];
+            if (!@$rename($temporary, $target)) {
+                throw new RuntimeException('Nepavyko išsaugoti media failo');
+            }
+        }
+    } catch (Throwable $e) {
+        $kept = [];
+        foreach (array_reverse($journal) as [$target, $backup]) {
+            if ($backup === null) {
+                @unlink($target);
+            } elseif (!@$rename($backup, $target)) {
+                $kept[] = $backup;
+            }
+        }
+        if ($kept !== []) {
+            throw new RuntimeException(
+                'Nepavyko išsaugoti media failų, o ankstesnių failų nepavyko atkurti; '
+                . 'jų kopijos liko: ' . implode(', ', $kept),
+                0,
+                $e,
+            );
+        }
+        throw $e;
+    }
+    foreach ($journal as [, $backup]) {
+        if ($backup !== null) {
+            @unlink($backup);
+        }
+    }
+}
+
+/** @param ?callable(string, string): bool $rename passed to media_install_files() */
+function media_import_archive(array $file, string $kind, array $selected, ?callable $rename = null): array
 {
     if (!class_exists('ZipArchive')) {
         throw new RuntimeException('Archyvams serveryje reikalingas PHP zip plėtinys');
@@ -572,12 +629,8 @@ function media_import_archive(array $file, string $kind, array $selected): array
                 }
             }
         }
-        foreach ($temporaries as $temporary => $target) {
-            if (!rename($temporary, $target)) {
-                throw new RuntimeException('Nepavyko išsaugoti media failo');
-            }
-            unset($temporaries[$temporary]);
-        }
+        media_install_files($temporaries, $rename);
+        $temporaries = [];
     } finally {
         foreach (array_keys($temporaries) as $temporary) {
             @unlink($temporary);

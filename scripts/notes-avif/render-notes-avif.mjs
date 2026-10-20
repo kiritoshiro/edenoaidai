@@ -34,8 +34,8 @@
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -236,19 +236,27 @@ window.comparePages = async (aUrl, bUrl, width, height) => {
 };
 true;`;
 
-async function launchBrowser(executable) {
-    const profile = await mkdtemp(path.join(tmpdir(), 'notes-avif-browser-'));
+// `cleanups` is the set the signal handlers run; the browser's cleanup joins
+// it as soon as its profile exists, so Ctrl+C during startup also stops the
+// browser and removes the profile.
+async function launchBrowser(executable, cleanups) {
+    // Synchronous, so no signal can arrive between creating and registering.
+    const profile = mkdtempSync(path.join(tmpdir(), 'notes-avif-browser-'));
     let child;
     let cdp;
-    const cleanup = async () => {
-        if (cdp) {
-            await Promise.race([cdp.send('Browser.close').catch(() => {}), sleep(2000)]);
-            cdp.close();
-        }
-        if (child && child.exitCode === null) child.kill();
-        await sleep(500);
-        await rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {});
-    };
+    let cleaning = null;
+    const cleanup = () =>
+        (cleaning ??= (async () => {
+            if (cdp) {
+                await Promise.race([cdp.send('Browser.close').catch(() => {}), sleep(2000)]);
+                cdp.close();
+            }
+            if (child && child.exitCode === null) child.kill();
+            await sleep(500);
+            await rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {});
+            cleanups.delete(cleanup);
+        })());
+    cleanups.add(cleanup);
     try {
         child = spawn(
             executable,
@@ -409,6 +417,20 @@ async function main() {
         return sourcesSaving;
     };
 
+    // Installed before anything that needs cleaning up is started.
+    const cleanups = new Set();
+    let stopping = false;
+    const stop = signal => {
+        if (stopping) return;
+        stopping = true;
+        console.log(`\n${signal}: stopping; finished pages are kept for the next run.`);
+        Promise.allSettled([saveSources(), ...[...cleanups].map(cleanup => cleanup())])
+            .then(() => rm(folders.work, { recursive: true, force: true }).catch(() => {}))
+            .finally(() => process.exit(130));
+    };
+    process.once('SIGINT', () => stop('SIGINT'));
+    process.once('SIGTERM', () => stop('SIGTERM'));
+
     const { pages, invalid, jpgWithoutSvg } = await listPages(options);
     console.log(
         `${pages.length} SVG pages from ${options.svgDir || options.site}; ` +
@@ -416,18 +438,7 @@ async function main() {
             `browser ${path.basename(options.browser)}`,
     );
 
-    const browser = await launchBrowser(options.browser);
-    let stopping = false;
-    const stop = signal => {
-        if (stopping) return;
-        stopping = true;
-        console.log(`\n${signal}: stopping; finished pages are kept for the next run.`);
-        Promise.allSettled([saveSources(), browser.close()])
-            .then(() => rm(folders.work, { recursive: true, force: true }).catch(() => {}))
-            .finally(() => process.exit(130));
-    };
-    process.once('SIGINT', () => stop('SIGINT'));
-    process.once('SIGTERM', () => stop('SIGTERM'));
+    const browser = await launchBrowser(options.browser, cleanups);
 
     const rows = [];
     const failures = [];

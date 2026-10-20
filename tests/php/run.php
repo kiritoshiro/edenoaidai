@@ -280,6 +280,64 @@ try {
         check(thrown(fn () => media_import_archive($upload("$work/count.zip"), 'notes', ['svg'])) === InvalidArgumentException::class,
             'import: more than ' . MEDIA_ARCHIVE_MAX_ENTRIES . ' entries refused');
 
+        // Installing is all-or-nothing: an injected rename() failure at any
+        // step leaves every target as it was.
+        $originals = ['61.svg' => '<svg xmlns="http://www.w3.org/2000/svg"><!-- old 61 --></svg>',
+            '62.svg' => '<svg xmlns="http://www.w3.org/2000/svg"><!-- old 62 --></svg>'];
+        $resetTargets = function () use ($files, $originals): void {
+            @mkdir("$files/notes/svg", 0777, true);
+            foreach ($originals as $name => $content) {
+                file_put_contents("$files/notes/svg/$name", $content);
+            }
+            @unlink("$files/notes/svg/63.svg");
+        };
+        $installZip = make_zip("$work/install.zip", [
+            'notes/svg/61.svg' => $svg . '<!-- new 61 -->',
+            'notes/svg/62.svg' => $svg . '<!-- new 62 -->',
+            'notes/svg/63.svg' => $svg . '<!-- new 63 -->',
+        ]);
+        // rename() calls in order: 61 aside, 61 in, 62 aside, 62 in, 63 in.
+        $failingAt = function (array $failCalls) {
+            $call = 0;
+            return function (string $from, string $to) use (&$call, $failCalls): bool {
+                return in_array(++$call, $failCalls, true) ? false : rename($from, $to);
+            };
+        };
+        $unchanged = fn (): bool => file_get_contents("$files/notes/svg/61.svg") === $originals['61.svg']
+            && file_get_contents("$files/notes/svg/62.svg") === $originals['62.svg']
+            && !file_exists("$files/notes/svg/63.svg");
+        foreach ([2 => 'installing the first file', 3 => 'moving a later file aside', 5 => 'installing the last (new) file'] as $at => $step) {
+            $resetTargets();
+            $error = thrown(fn () => media_import_archive($upload($installZip), 'notes', ['svg'], $failingAt([$at])));
+            $dotFiles = array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.'));
+            check($error === RuntimeException::class && $unchanged() && $dotFiles === [],
+                "install: rename failure while $step leaves every file as it was, no temp/backup files");
+        }
+
+        $resetTargets();
+        try {
+            media_import_archive($upload($installZip), 'notes', ['svg'], $failingAt([5, 6]));
+            $message = '';
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
+        }
+        // Temporary files start with "." (tempnam() keeps only ".me" on Windows).
+        $backups = array_values(array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.')));
+        check(count($backups) === 1 && str_contains($message, $backups[0])
+            && file_get_contents("$files/notes/svg/{$backups[0]}") === $originals['62.svg']
+            && file_get_contents("$files/notes/svg/61.svg") === $originals['61.svg'],
+            'install: a backup that cannot be restored is kept and named in the error');
+        foreach ($backups as $backup) {
+            unlink("$files/notes/svg/$backup");
+        }
+
+        $resetTargets();
+        $result = media_import_archive($upload($installZip), 'notes', ['svg']);
+        $dotFiles = array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.'));
+        check($result['imported'] === 3 && str_contains(file_get_contents("$files/notes/svg/62.svg"), 'new 62')
+            && file_exists("$files/notes/svg/63.svg") && $dotFiles === [],
+            'install: a successful import replaces the files and leaves no backups');
+
         $leftovers = array_filter(array_merge(notes_folder('svg'), notes_folder('avif')), fn ($name) => str_starts_with($name, '.'));
         check($leftovers === [], 'import: no temporary files left behind');
     }
