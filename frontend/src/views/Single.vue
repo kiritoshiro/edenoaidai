@@ -335,6 +335,16 @@
             </div>
         </article>
 
+        <section
+            v-if="notesNeedAvif"
+            class="song-notes song-panel song-notes--unsupported"
+        >
+            <p>
+                Šios giesmės natos yra tik #2 formatu, o ši naršyklė jo nerodo.
+                Atnaujinkite naršyklę ar įrenginio sistemą.
+            </p>
+        </section>
+
         <section v-if="hasNotes" class="song-notes song-panel">
             <div class="song-notes__summary">
                 <button
@@ -1027,6 +1037,14 @@
 import { config } from '../lib/config';
 import { lyricsToPlainText } from '../lib/lyrics';
 import {
+    availableNoteFormats,
+    normalizeNoteFormat,
+    noteFormatLabel,
+    notePageIndexes,
+    notesNeedAvif,
+    supportsAvif,
+} from '../lib/noteFormats';
+import {
     findSongIdByNumber,
     formatSongNumber,
     maximumSongNumber as getMaximumSongNumber,
@@ -1131,10 +1149,13 @@ export default {
             songCatalog: [],
             songNumberInput: formatSongNumber(this.songId),
             songNumberEditing: false,
-            imageType:
-                localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
-            preferredNoteFormat:
-                localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
+            imageType: normalizeNoteFormat(localStorage.getItem('notesFormat')),
+            preferredNoteFormat: normalizeNoteFormat(
+                localStorage.getItem('notesFormat'),
+            ),
+            avifSupported: true,
+            // Set when a #2 page failed to load and this song switched to #1.
+            avifFallback: false,
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
@@ -1230,34 +1251,16 @@ export default {
                 : '';
         },
         availableNoteFormats() {
-            const detected = this.song?.notePages;
-            if (detected && typeof detected === 'object') {
-                return ['svg', 'jpg'].filter(
-                    format =>
-                        Array.isArray(detected[format]) &&
-                        detected[format].length > 0,
-                );
-            }
-
-            const legacyCount = Number(this.song?.pages) || 0;
-            return legacyCount > 0 ? ['svg', 'jpg'] : [];
+            return availableNoteFormats(this.song, this.avifSupported);
+        },
+        notesNeedAvif() {
+            return notesNeedAvif(this.song, this.avifSupported);
         },
         hasNotes() {
             return this.availableNoteFormats.length > 0;
         },
         notePageIndexes() {
-            const detected = this.song?.notePages?.[this.imageType];
-            if (Array.isArray(detected)) {
-                return detected;
-            }
-
-            if (this.song?.notePages && typeof this.song.notePages === 'object') {
-                return [];
-            }
-
-            // Compatibility with data cached by older installed versions.
-            const legacyCount = (this.song && Number(this.song.pages)) || 0;
-            return Array.from({ length: legacyCount }, (_, index) => index);
+            return notePageIndexes(this.song, this.imageType);
         },
         imageUrls() {
             if (!this.song) return [];
@@ -1483,6 +1486,7 @@ export default {
             localStorage.setItem('notesVisible', String(value));
         },
         availableNoteFormats(formats) {
+            this.avifFallback = false;
             this.imageType = formats.includes(this.preferredNoteFormat)
                 ? this.preferredNoteFormat
                 : formats[0] || this.preferredNoteFormat;
@@ -1561,6 +1565,9 @@ export default {
         },
     },
     created() {
+        supportsAvif().then(supported => {
+            this.avifSupported = supported;
+        });
         this.fetchSongIds();
         this.fetchTrackLabels();
         this.fetchSong();
@@ -2593,9 +2600,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
             this.notesZoom = 1;
             this.$nextTick(() => this.resetNotesViewport());
         },
-        noteFormatLabel(format) {
-            return format === 'svg' ? 'SVG' : 'JPG';
-        },
+        noteFormatLabel,
         async openNotesFullscreen() {
             if (
                 this.imageUrls.length === 0 ||
@@ -2661,6 +2666,18 @@ body.light .zone{color:rgba(46,32,13,.72)}
             });
         },
         onImageError(index) {
+            // A #2 page missing on the server (e.g. saved data listing pages
+            // that are not uploaded yet) shows the song's #1 pages instead,
+            // once per song and without changing the remembered choice.
+            if (
+                this.imageType === 'avif' &&
+                !this.avifFallback &&
+                this.availableNoteFormats.includes('svg')
+            ) {
+                this.avifFallback = true;
+                this.imageType = 'svg';
+                return;
+            }
             this.imageLoaded[index] = true;
             this.imageErrored[index] = true;
         },
@@ -3801,6 +3818,13 @@ body.light .zone{color:rgba(46,32,13,.72)}
     width: 100%;
     margin: 0 0 16px;
     overflow: hidden;
+}
+
+.song-notes--unsupported p {
+    margin: 0;
+    padding: 14px 16px;
+    color: var(--app-muted);
+    font-size: 14px;
 }
 
 .song-notes {

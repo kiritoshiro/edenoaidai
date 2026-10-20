@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 const SONG_ID_RE = '/^[A-Za-z0-9 _-]{1,20}$/';
 const TYPE_RE = '/^[a-z0-9&+_-]{1,40}$/i';
-const FORMATS = ['svg', 'jpg'];
+// Sheet-music formats: vector SVG and raster AVIF (users see them as #1 and #2).
+const FORMATS = ['svg', 'avif'];
+// Keeps 200 dpi notes crisp (about 48–50 dB PSNR against a lossless render)
+// at roughly a quarter of the JPG size. scripts/notes-avif/ uses the same.
+const NOTE_AVIF_QUALITY = 60;
+// Sheet pages are about 2 megapixels (1181×1811). Refuse anything far larger
+// before GD allocates it: a decoded true-colour image takes 4+ bytes a pixel.
+const NOTE_IMAGE_MAX_PIXELS = 8_000_000;
+const NOTE_IMAGE_MAX_SIDE = 6000;
 const TRACK_ICON_EXTENSIONS = ['svg', 'png', 'webp', 'jpg', 'jpeg'];
 const SESSION_HOURS = 12;
 
@@ -209,7 +217,7 @@ function assert_type(string $value): string
 function assert_format(string $value): string
 {
     if (!in_array($value, FORMATS, true)) {
-        fail(400, 'Formatas turi būti svg arba jpg');
+        fail(400, 'Formatas turi būti svg arba avif');
     }
     return $value;
 }
@@ -264,6 +272,209 @@ function assert_safe_svg_file(string $path): void
     $contents = file_get_contents($path);
     if ($contents === false || !svg_is_safe($contents)) {
         fail(400, 'SVG faile yra skriptų ar kito aktyvaus turinio, todėl jis atmestas');
+    }
+}
+
+/** True when the file starts with an ISO-BMFF "ftyp" box naming an AVIF brand. */
+function is_avif_data(string $head): bool
+{
+    if (strlen($head) < 16 || substr($head, 4, 4) !== 'ftyp') {
+        return false;
+    }
+    $boxSize = unpack('N', substr($head, 0, 4))[1];
+    $brands = substr($head, 8, max(0, min($boxSize, strlen($head)) - 8));
+    // Major brand, minor version, then compatible brands, 4 bytes each.
+    foreach (str_split($brands, 4) as $offset => $brand) {
+        if ($offset !== 1 && ($brand === 'avif' || $brand === 'avis')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function is_avif_file(string $path): bool
+{
+    $handle = @fopen($path, 'rb');
+    if ($handle === false) {
+        return false;
+    }
+    $head = (string) fread($handle, 64);
+    fclose($handle);
+    return is_avif_data($head);
+}
+
+/**
+ * True when the file's top-level ISO-BMFF boxes cover it exactly, so nothing
+ * (an HTML page, a ZIP archive) is hidden after the image data.
+ */
+function avif_boxes_cover_file(string $path): bool
+{
+    $size = @filesize($path);
+    $handle = @fopen($path, 'rb');
+    if ($size === false || $handle === false) {
+        return false;
+    }
+    $offset = 0;
+    $boxes = 0;
+    try {
+        while ($offset < $size) {
+            if (++$boxes > 64 || fseek($handle, $offset) !== 0) {
+                return false;
+            }
+            $header = (string) fread($handle, 16);
+            if (strlen($header) < 8 || !preg_match('/^[\x20-\x7E]{4}$/', substr($header, 4, 4))) {
+                return false;
+            }
+            $boxSize = unpack('N', substr($header, 0, 4))[1];
+            if ($boxSize === 0) {
+                return true; // The last box runs to the end of the file.
+            }
+            if ($boxSize === 1) {
+                $boxSize = strlen($header) === 16 ? unpack('J', substr($header, 8, 8))[1] : 0;
+                if ($boxSize < 16) {
+                    return false;
+                }
+            } elseif ($boxSize < 8) {
+                return false;
+            }
+            $offset += $boxSize;
+        }
+        return $offset === $size;
+    } finally {
+        fclose($handle);
+    }
+}
+
+function ini_size_bytes(string $value): int
+{
+    $value = trim($value);
+    $number = (int) $value;
+    return match (strtolower(substr($value, -1))) {
+        'g' => $number * 1024 ** 3,
+        'm' => $number * 1024 ** 2,
+        'k' => $number * 1024,
+        default => $number,
+    };
+}
+
+/** Whether PHP's memory_limit leaves room for $copies decoded copies of an image. */
+function image_memory_available(int $pixels, int $copies): bool
+{
+    $limit = ini_size_bytes((string) ini_get('memory_limit'));
+    if ($limit <= 0) {
+        return true; // -1: no limit
+    }
+    // GD true colour is 4 bytes a pixel, plus decoder buffers and headroom.
+    $needed = $pixels * 5 * $copies + 16 * 1024 * 1024;
+    return memory_get_usage(true) + $needed <= $limit;
+}
+
+/**
+ * @throws InvalidArgumentException when the page is not a sensible size
+ * @throws RuntimeException when PHP's memory limit is too low to process it
+ */
+function assert_note_image_size(int $width, int $height, int $copies): void
+{
+    if ($width < 1 || $height < 1 || $width > NOTE_IMAGE_MAX_SIDE || $height > NOTE_IMAGE_MAX_SIDE
+        || $width * $height > NOTE_IMAGE_MAX_PIXELS) {
+        throw new InvalidArgumentException(
+            'Paveikslėlio matmenys netinkami arba per dideli (daugiausia 8 megapikseliai)',
+        );
+    }
+    if (!image_memory_available($width * $height, $copies)) {
+        throw new RuntimeException('Serveriui neužtenka atminties šiam paveikslėliui apdoroti');
+    }
+}
+
+/**
+ * Check an AVIF page before storing it: AVIF signature, nothing outside its
+ * boxes, a sensible size, and GD can actually decode it.
+ *
+ * @throws InvalidArgumentException when the file is not a usable AVIF page
+ * @throws RuntimeException when this PHP cannot decode AVIF
+ */
+function assert_avif_page(string $path): void
+{
+    if (!is_avif_file($path) || !avif_boxes_cover_file($path)) {
+        throw new InvalidArgumentException('Failas nėra tvarkingas AVIF paveikslėlis');
+    }
+    $info = @getimagesize($path);
+    if (!is_array($info) || $info[2] !== IMAGETYPE_AVIF) {
+        throw new InvalidArgumentException('Failas nėra tvarkingas AVIF paveikslėlis');
+    }
+    [$width, $height] = $info;
+    assert_note_image_size((int) $width, (int) $height, 1);
+    if (!function_exists('imagecreatefromavif')) {
+        throw new RuntimeException('Serverio PHP GD plėtinys nepalaiko AVIF formato');
+    }
+    $image = @imagecreatefromavif($path);
+    if ($image === false) {
+        throw new InvalidArgumentException('AVIF paveikslėlio nepavyko perskaityti');
+    }
+    $matches = imagesx($image) === (int) $width && imagesy($image) === (int) $height;
+    imagedestroy($image);
+    if (!$matches) {
+        throw new InvalidArgumentException('AVIF paveikslėlio nepavyko perskaityti');
+    }
+}
+
+/**
+ * Convert an uploaded JPEG, PNG or WebP page to AVIF with GD, for pages that
+ * have no SVG to render from (the bulk pages are rendered from SVG on a
+ * desktop by scripts/notes-avif/). Transparency is flattened onto white.
+ * Writes through a temporary file in the target folder.
+ *
+ * @throws InvalidArgumentException when the source is not a supported image
+ * @throws RuntimeException when GD cannot write AVIF or the file cannot be saved
+ */
+function convert_image_to_avif(string $source, string $target): void
+{
+    if (!function_exists('imageavif')) {
+        throw new RuntimeException('Serverio PHP GD plėtinys nepalaiko AVIF formato');
+    }
+    $info = @getimagesize($source);
+    $loaders = [
+        IMAGETYPE_JPEG => 'imagecreatefromjpeg',
+        IMAGETYPE_PNG => 'imagecreatefrompng',
+        IMAGETYPE_WEBP => 'imagecreatefromwebp',
+    ];
+    if (!is_array($info) || !isset($loaders[$info[2]])) {
+        throw new InvalidArgumentException('Paveikslėlis turi būti AVIF, JPG, PNG arba WEBP failas');
+    }
+    [$width, $height] = $info;
+    // The decoded source, the white canvas, and the encoder's own buffers.
+    assert_note_image_size((int) $width, (int) $height, 3);
+    $image = @$loaders[$info[2]]($source);
+    if ($image === false || imagesx($image) !== $width || imagesy($image) !== $height) {
+        throw new InvalidArgumentException('Nepavyko perskaityti paveikslėlio');
+    }
+    // A fresh true-colour canvas also turns palette PNGs into true colour,
+    // which GD's AVIF encoder requires.
+    $canvas = imagecreatetruecolor($width, $height);
+    imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+    imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
+    imagedestroy($image);
+
+    $dir = dirname($target);
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        imagedestroy($canvas);
+        throw new RuntimeException('Nepavyko sukurti natų aplanko');
+    }
+    $temporary = tempnam($dir, '.avif-');
+    if ($temporary === false) {
+        imagedestroy($canvas);
+        throw new RuntimeException('Nepavyko sukurti laikino failo');
+    }
+    $written = imageavif($canvas, $temporary, NOTE_AVIF_QUALITY);
+    imagedestroy($canvas);
+    if (!$written || filesize($temporary) === 0) {
+        @unlink($temporary);
+        throw new RuntimeException('Nepavyko užkoduoti AVIF failo');
+    }
+    @chmod($temporary, 0644);
+    if (!rename($temporary, $target)) {
+        @unlink($temporary);
+        throw new RuntimeException('Nepavyko išsaugoti AVIF failo');
     }
 }
 

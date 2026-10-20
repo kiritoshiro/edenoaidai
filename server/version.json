@@ -1,9 +1,9 @@
 {
-  "sha": "7cfd908742649e1a44a92d90b2d4d06da2757f6a",
-  "shortSha": "7cfd908",
-  "branch": "review/code-security-2026-10-18",
-  "message": "ci: limit the weekly security scan to changing inputs (#12)",
-  "date": "2026-10-17T20:36:31+03:00",
+  "sha": "b4efe8fc8903a27de2cbedecac3da20853718e0a",
+  "shortSha": "b4efe8f",
+  "branch": "feature/avif-sheet-music",
+  "message": "Document when the old JPG sheet pages can be removed",
+  "date": "2026-10-20T13:47:56+03:00",
   "dirty": true,
-  "builtAt": "2026-10-17T22:22:46.088Z"
+  "builtAt": "2026-10-20T11:06:47.798Z"
 }
