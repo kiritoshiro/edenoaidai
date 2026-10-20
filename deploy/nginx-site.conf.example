@@ -70,8 +70,11 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
     }
 
-    # Always revalidate the application shell and service worker.
-    location ~* ^/(index\.html|sw\.js|manifest\.json|version\.json)$ {
+    # Always revalidate the application shell and service workers.
+    # service-worker.js is the kill switch for pre-July-2026 installs: it must
+    # be served as JavaScript (never the index.html fallback) and must not be
+    # cached, or the old app's update check keeps failing.
+    location ~* ^/(index\.html|sw\.js|service-worker\.js|manifest\.json|version\.json)$ {
         try_files $uri =404;
         expires -1;
         add_header Cache-Control "no-cache";

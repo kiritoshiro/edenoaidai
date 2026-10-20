@@ -267,10 +267,19 @@ of the app installed on phones still do:
   `https://adventistai.lt/giesmes/notes/<format>/<file>`. Since 2026-10-20 the
   shared server's nginx (`/etc/nginx/snippets/adventistai-giesmes.conf`)
   redirects those to `https://giesmynas.adventistai.lt/files/notes/<format>/<file>`.
-  These builds never update by themselves: their service worker
-  (`/service-worker.js?<version>`) serves the cached app shell, and the site
-  now answers that script URL with `index.html`, so the browser's update check
-  fails and the old worker stays.
+  These builds never updated by themselves: their service worker
+  (`/service-worker.js?<version>`) serves the cached app shell, and without
+  the file the site answered that script URL with `index.html`, so the
+  browser's update check failed and the old worker stayed. `server/service-worker.js`
+  (source: `frontend/public/service-worker.js`) is now a kill switch: the old
+  worker's next update check installs it, and it deletes the old caches,
+  unregisters itself and reloads the app, which then registers `/sw.js`. On
+  iOS 15 and older Safari cannot reload the open app from a service worker,
+  so the old app keeps running until the next launch or reload, which then
+  loads the current app from the network. It
+  only works if the file is served as JavaScript and not cached for long
+  (nginx no-cache location; purge Cloudflare after the first deploy). Keep it
+  on the server until the old requests stop.
 - Current builds that have not reloaded since the AVIF switch, and offline
   snapshots saved before it, may still ask for `files/notes/jpg/` until the
   page reloads (snapshots are then read as AVIF).
