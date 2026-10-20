@@ -4,7 +4,14 @@ declare(strict_types=1);
 
 const SONG_ID_RE = '/^[A-Za-z0-9 _-]{1,20}$/';
 const TYPE_RE = '/^[a-z0-9&+_-]{1,40}$/i';
-const FORMATS = ['svg', 'jpg'];
+// Sheet-music formats: vector SVG and raster AVIF (users see them as #1 and #2).
+const FORMATS = ['svg', 'avif'];
+// Keeps 200 dpi notes crisp (about 45 dB PSNR against the old JPG pages) at
+// roughly a quarter of the JPG size.
+const NOTE_AVIF_QUALITY = 60;
+// Sheet pages are about 2 megapixels; refuse anything far larger before GD
+// allocates it.
+const NOTE_IMAGE_MAX_PIXELS = 40_000_000;
 const TRACK_ICON_EXTENSIONS = ['svg', 'png', 'webp', 'jpg', 'jpeg'];
 const SESSION_HOURS = 12;
 
@@ -209,7 +216,7 @@ function assert_type(string $value): string
 function assert_format(string $value): string
 {
     if (!in_array($value, FORMATS, true)) {
-        fail(400, 'Formatas turi būti svg arba jpg');
+        fail(400, 'Formatas turi būti svg arba avif');
     }
     return $value;
 }
@@ -265,6 +272,109 @@ function assert_safe_svg_file(string $path): void
     if ($contents === false || !svg_is_safe($contents)) {
         fail(400, 'SVG faile yra skriptų ar kito aktyvaus turinio, todėl jis atmestas');
     }
+}
+
+/** True when the file starts with an ISO-BMFF "ftyp" box naming an AVIF brand. */
+function is_avif_data(string $head): bool
+{
+    if (strlen($head) < 16 || substr($head, 4, 4) !== 'ftyp') {
+        return false;
+    }
+    $boxSize = unpack('N', substr($head, 0, 4))[1];
+    $brands = substr($head, 8, max(0, min($boxSize, strlen($head)) - 8));
+    // Major brand, minor version, then compatible brands, 4 bytes each.
+    foreach (str_split($brands, 4) as $offset => $brand) {
+        if ($offset !== 1 && ($brand === 'avif' || $brand === 'avis')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function is_avif_file(string $path): bool
+{
+    $handle = @fopen($path, 'rb');
+    if ($handle === false) {
+        return false;
+    }
+    $head = (string) fread($handle, 64);
+    fclose($handle);
+    return is_avif_data($head);
+}
+
+/**
+ * Convert a JPEG, PNG or WebP image to AVIF with GD. Transparency is
+ * flattened onto white, as the old JPG pages were. Writes through a temporary
+ * file in the target folder. Without $overwrite an existing target is never
+ * replaced and false is returned instead.
+ *
+ * @throws InvalidArgumentException when the source is not a supported image
+ * @throws RuntimeException when GD cannot write AVIF or the file cannot be saved
+ */
+function convert_image_to_avif(string $source, string $target, bool $overwrite): bool
+{
+    if (!function_exists('imageavif')) {
+        throw new RuntimeException('Serverio PHP GD plėtinys nepalaiko AVIF formato');
+    }
+    if (!$overwrite && file_exists($target)) {
+        return false;
+    }
+    $data = @file_get_contents($source);
+    $info = $data === false ? false : @getimagesizefromstring($data);
+    if (!is_array($info) || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
+        throw new InvalidArgumentException('Paveikslėlis turi būti AVIF, JPG, PNG arba WEBP failas');
+    }
+    [$width, $height] = $info;
+    if ($width < 1 || $height < 1 || $width * $height > NOTE_IMAGE_MAX_PIXELS) {
+        throw new InvalidArgumentException('Paveikslėlio matmenys netinkami arba per dideli');
+    }
+    $image = @imagecreatefromstring($data);
+    unset($data);
+    if ($image === false) {
+        throw new InvalidArgumentException('Nepavyko perskaityti paveikslėlio');
+    }
+    // A fresh true-colour canvas also turns palette PNGs into true colour,
+    // which GD's AVIF encoder requires.
+    $canvas = imagecreatetruecolor($width, $height);
+    imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+    imagecopy($canvas, $image, 0, 0, 0, 0, $width, $height);
+    imagedestroy($image);
+
+    $dir = dirname($target);
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        imagedestroy($canvas);
+        throw new RuntimeException('Nepavyko sukurti natų aplanko');
+    }
+    $temporary = tempnam($dir, '.avif-');
+    if ($temporary === false) {
+        imagedestroy($canvas);
+        throw new RuntimeException('Nepavyko sukurti laikino failo');
+    }
+    $written = imageavif($canvas, $temporary, NOTE_AVIF_QUALITY);
+    imagedestroy($canvas);
+    if (!$written || filesize($temporary) === 0) {
+        @unlink($temporary);
+        throw new RuntimeException('Nepavyko užkoduoti AVIF failo');
+    }
+    @chmod($temporary, 0644);
+    if ($overwrite) {
+        if (!rename($temporary, $target)) {
+            @unlink($temporary);
+            throw new RuntimeException('Nepavyko išsaugoti AVIF failo');
+        }
+        return true;
+    }
+    // link() fails when the target already exists, so a file that appeared
+    // while encoding is left alone.
+    $linked = @link($temporary, $target);
+    @unlink($temporary);
+    if (!$linked) {
+        if (file_exists($target)) {
+            return false;
+        }
+        throw new RuntimeException('Nepavyko išsaugoti AVIF failo');
+    }
+    return true;
 }
 
 function notes_file_name(string $songId, int $page, string $format): string

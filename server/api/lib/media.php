@@ -58,8 +58,9 @@ function media_options(PDO $db): array
 function media_format_label(string $format): string
 {
     return match ($format) {
-        'svg' => 'SVG (vektorinės natos)',
-        'jpg' => 'JPG (paveikslėlių natos)',
+        // Visitors see the formats as #1 and #2; admins see both names.
+        'svg' => '#1 · SVG (vektorinės natos)',
+        'avif' => '#2 · AVIF (paveikslėlių natos)',
         default => strtoupper($format),
     };
 }
@@ -419,6 +420,7 @@ function media_import_archive(array $file, string $kind, array $selected): array
     $entries = [];
     $targets = [];
     $skipped = 0;
+    $legacyJpg = 0;
     try {
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $name = $zip->getNameIndex($index);
@@ -445,6 +447,12 @@ function media_import_archive(array $file, string $kind, array $selected): array
 
             [$root, $bucket, $filename] = $parts;
             if ($root !== $kind || !in_array($bucket, $selected, true)) {
+                // Archives made before the AVIF switch hold notes/jpg pages.
+                // Converting hundreds of pages would outlast the request, so
+                // they are only counted; api/convert-notes-avif.php converts them.
+                if ($kind === 'notes' && $root === 'notes' && $bucket === 'jpg') {
+                    $legacyJpg++;
+                }
                 $skipped++;
                 continue;
             }
@@ -480,6 +488,14 @@ function media_import_archive(array $file, string $kind, array $selected): array
                         );
                     }
                 }
+                if ($bucket === 'avif') {
+                    $head = $zip->getFromIndex($index, 64);
+                    if ($head === false || !is_avif_data($head)) {
+                        throw new InvalidArgumentException(
+                            'Archyvo failas ' . $filename . ' nėra AVIF paveikslėlis',
+                        );
+                    }
+                }
             }
             if (isset($targets[$target])) {
                 throw new InvalidArgumentException('Archyve kartojasi tas pats media failas');
@@ -500,5 +516,6 @@ function media_import_archive(array $file, string $kind, array $selected): array
         'selected' => $selected,
         'imported' => count($entries),
         'skipped' => $skipped,
+        'legacyJpg' => $legacyJpg,
     ];
 }

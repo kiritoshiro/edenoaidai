@@ -1027,6 +1027,13 @@
 import { config } from '../lib/config';
 import { lyricsToPlainText } from '../lib/lyrics';
 import {
+    availableNoteFormats,
+    normalizeNoteFormat,
+    noteFormatLabel,
+    notePageIndexes,
+    supportsAvif,
+} from '../lib/noteFormats';
+import {
     findSongIdByNumber,
     formatSongNumber,
     maximumSongNumber as getMaximumSongNumber,
@@ -1131,10 +1138,11 @@ export default {
             songCatalog: [],
             songNumberInput: formatSongNumber(this.songId),
             songNumberEditing: false,
-            imageType:
-                localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
-            preferredNoteFormat:
-                localStorage.getItem('notesFormat') === 'svg' ? 'svg' : 'jpg',
+            imageType: normalizeNoteFormat(localStorage.getItem('notesFormat')),
+            preferredNoteFormat: normalizeNoteFormat(
+                localStorage.getItem('notesFormat'),
+            ),
+            avifSupported: true,
             imageLoaded: [],
             imageErrored: [],
             notesFullscreenOpen: false,
@@ -1230,34 +1238,13 @@ export default {
                 : '';
         },
         availableNoteFormats() {
-            const detected = this.song?.notePages;
-            if (detected && typeof detected === 'object') {
-                return ['svg', 'jpg'].filter(
-                    format =>
-                        Array.isArray(detected[format]) &&
-                        detected[format].length > 0,
-                );
-            }
-
-            const legacyCount = Number(this.song?.pages) || 0;
-            return legacyCount > 0 ? ['svg', 'jpg'] : [];
+            return availableNoteFormats(this.song, this.avifSupported);
         },
         hasNotes() {
             return this.availableNoteFormats.length > 0;
         },
         notePageIndexes() {
-            const detected = this.song?.notePages?.[this.imageType];
-            if (Array.isArray(detected)) {
-                return detected;
-            }
-
-            if (this.song?.notePages && typeof this.song.notePages === 'object') {
-                return [];
-            }
-
-            // Compatibility with data cached by older installed versions.
-            const legacyCount = (this.song && Number(this.song.pages)) || 0;
-            return Array.from({ length: legacyCount }, (_, index) => index);
+            return notePageIndexes(this.song, this.imageType);
         },
         imageUrls() {
             if (!this.song) return [];
@@ -1561,6 +1548,9 @@ export default {
         },
     },
     created() {
+        supportsAvif().then(supported => {
+            this.avifSupported = supported;
+        });
         this.fetchSongIds();
         this.fetchTrackLabels();
         this.fetchSong();
@@ -2593,9 +2583,7 @@ body.light .zone{color:rgba(46,32,13,.72)}
             this.notesZoom = 1;
             this.$nextTick(() => this.resetNotesViewport());
         },
-        noteFormatLabel(format) {
-            return format === 'svg' ? 'SVG' : 'JPG';
-        },
+        noteFormatLabel,
         async openNotesFullscreen() {
             if (
                 this.imageUrls.length === 0 ||

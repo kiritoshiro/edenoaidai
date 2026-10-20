@@ -216,16 +216,17 @@
 
             <h2>Natos</h2>
             <p class="adm-file-note">
-                Rodomi tik serveryje esantys SVG ir JPG failai. Naują natų puslapį
-                pridėkite atitinkamo formato mygtuku.
+                Rodomi tik serveryje esantys SVG (lankytojams #1) ir AVIF (lankytojams #2)
+                failai. Naują natų puslapį pridėkite atitinkamo formato mygtuku. Į AVIF
+                skiltį galima įkelti ir JPG, PNG ar WEBP paveikslėlį: serveris jį paverčia AVIF.
             </p>
             <section
-                v-for="format in ['svg', 'jpg']"
+                v-for="format in noteFormats"
                 :key="format"
                 class="note-format-editor"
             >
                 <div class="note-format-editor__header">
-                    <h3>{{ format.toUpperCase() }}</h3>
+                    <h3>{{ noteFormatLabel(format) }} · {{ format.toUpperCase() }}</h3>
                     <button
                         type="button"
                         class="adm-button adm-button--ghost"
@@ -265,10 +266,10 @@
                                     class="adm-button adm-button--ghost"
                                     style="display: inline-block; cursor: pointer"
                                 >
-                                    Pasirinkti {{ format.toUpperCase() }}
+                                    Pasirinkti failą
                                     <input
                                         type="file"
-                                        :accept="format === 'svg' ? '.svg,image/svg+xml' : '.jpg,.jpeg,image/jpeg'"
+                                        :accept="noteUploadAccept(format)"
                                         style="display: none"
                                         @change="onUploadNotes(format, entry.page, $event)"
                                     />
@@ -303,6 +304,7 @@
 import { api } from '../../lib/api';
 import { config } from '../../lib/config';
 import { lyricsToPlainText, plainTextToLyricsHtml } from '../../lib/lyrics';
+import { NOTE_FORMATS, noteFormatLabel, noteUploadAccept } from '../../lib/noteFormats';
 
 // Saugykloje eilučių lūžiai laikomi kaip <br>, o redaktoriuje rodomi
 // kaip paprastos naujos eilutės (Enter). Konvertuojama abiem kryptimis.
@@ -378,6 +380,7 @@ export default {
             song: null,
             allTracks: [],
             files: null,
+            noteFormats: NOTE_FORMATS,
             busy: false,
             error: '',
             message: '',
@@ -424,6 +427,8 @@ export default {
         }
     },
     methods: {
+        noteFormatLabel,
+        noteUploadAccept,
         addSlide() {
             this.song.slides.push(createSlide());
         },
@@ -500,7 +505,7 @@ export default {
             try {
                 const files = await api.songFiles(this.songId);
                 files.notes = files.notes || {};
-                for (const format of ['svg', 'jpg']) {
+                for (const format of NOTE_FORMATS) {
                     files.notes[format] = (files.notes[format] || [])
                         .filter(entry => entry.exists)
                         .map(entry => ({ ...entry, temporary: false }));

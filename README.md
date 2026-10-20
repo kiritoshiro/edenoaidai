@@ -202,13 +202,40 @@ an administrator opens the song/recording-type pages.
 Store sheet music under:
 
 ```text
-server/files/notes/jpg/<songId>.jpg
-server/files/notes/jpg/<songId>_1.jpg
 server/files/notes/svg/<songId>.svg
 server/files/notes/svg/<songId>_1.svg
+server/files/notes/avif/<songId>.avif
+server/files/notes/avif/<songId>_1.avif
 ```
 
 The first page has no suffix. Additional pages use `_1`, `_2`, and so on.
+Visitors see the two formats only as **#1** (SVG) and **#2** (AVIF); admin
+screens show both the number and the technical name. Browsers without AVIF
+support (Safari before iOS 16) are offered #1 only.
+
+The AVIF upload slot also accepts JPG, PNG and WebP pages. The server converts
+them with PHP GD (`imageavif()`, quality 60), so PHP needs GD with AVIF
+support. nginx must serve `.avif` as `image/avif`: check with
+`curl -sI https://<site>/files/notes/avif/<page>.avif`, and add
+`image/avif avif;` to nginx's `mime.types` if it is missing.
+
+### Converting the old JPG pages
+
+Before AVIF, raster pages lived in `files/notes/jpg/`. Convert them once (the
+command never overwrites an existing AVIF page and keeps the JPG files):
+
+```bash
+cd /home/giesmynas2/public_html
+sudo -u giesmynas2 php8.4 api/convert-notes-avif.php --dry-run
+sudo -u giesmynas2 php8.4 api/convert-notes-avif.php
+```
+
+Each page takes about 1–2 seconds. Running it again only converts pages that
+are still missing. After checking the AVIF pages, `files/notes/jpg/` can be
+deleted; the application no longer reads it. Media ZIP archives made before
+the switch contain `notes/jpg/` pages, which the archive import skips and
+counts. To restore them, extract the JPG pages into `files/notes/jpg/` and run
+the command again.
 
 ## Local development
 

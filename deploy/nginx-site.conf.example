@@ -51,6 +51,8 @@ server {
     }
 
     # Uploaded audio, icons, and sheet music must exist as real files.
+    # Sheet-music pages are AVIF: nginx's mime.types must contain
+    # "image/avif avif;" (older releases lack it).
     # The CSP sandbox stops a malicious uploaded SVG from running scripts with
     # this site's origin when opened directly; <img> display is unaffected.
     location ^~ /files/ {

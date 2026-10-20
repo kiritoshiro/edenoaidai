@@ -14,6 +14,7 @@ server/storage/backups/*.json
 server/files/audio/**/*.mp3
 server/files/notes/**/*.jpg
 server/files/notes/**/*.jpeg
+server/files/notes/**/*.avif
 server/files/notes/**/*.svg
 
 # Editor / OS
