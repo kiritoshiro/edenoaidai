@@ -183,7 +183,7 @@ if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segmen
 }
 
 // GET /api/media/export?kind=audio&types=type1,type2
-// GET /api/media/export?kind=notes&formats=svg,jpg
+// GET /api/media/export?kind=notes&formats=svg,avif
 if ($first === 'media' && $method === 'GET' && count($segments) === 2 && $segments[1] === 'export') {
     try {
         require_once __DIR__ . '/lib/media.php';
@@ -236,7 +236,7 @@ if ($first === 'media' && $method === 'POST' && count($segments) === 2 && $segme
 }
 
 // POST /api/media/import?kind=audio&types=type1,type2
-// POST /api/media/import?kind=notes&formats=svg,jpg
+// POST /api/media/import?kind=notes&formats=svg,avif
 if ($first === 'media' && $method === 'POST' && count($segments) === 2 && $segments[1] === 'import') {
     try {
         require_once __DIR__ . '/lib/media.php';
@@ -614,16 +614,32 @@ if ($first === 'files' && count($segments) === 4) {
 
         if ($method === 'POST') {
             $file = uploaded_file(15 * 1024 * 1024);
-            $valid = $format === 'svg'
-                ? has_extension($file, ['.svg'], ['svg'])
-                : has_extension($file, ['.jpg', '.jpeg'], ['jpeg']);
-            if (!$valid) {
-                fail(400, $format === 'svg' ? 'Failas turi būti SVG' : 'Failas turi būti JPG');
-            }
             if ($format === 'svg') {
+                if (!has_extension($file, ['.svg'], ['svg'])) {
+                    fail(400, 'Failas turi būti SVG');
+                }
                 assert_safe_svg_file($file['tmp_name']);
+                save_upload($file, $target);
+            } elseif (is_avif_file($file['tmp_name'])) {
+                try {
+                    assert_avif_page($file['tmp_name']);
+                } catch (InvalidArgumentException $e) {
+                    fail(400, $e->getMessage());
+                } catch (RuntimeException $e) {
+                    fail(500, $e->getMessage());
+                }
+                save_upload($file, $target);
+            } else {
+                // JPG, PNG and WebP pages are converted, so the raster folder
+                // only ever holds AVIF.
+                try {
+                    convert_image_to_avif($file['tmp_name'], $target);
+                } catch (InvalidArgumentException $e) {
+                    fail(400, $e->getMessage());
+                } catch (RuntimeException $e) {
+                    fail(500, $e->getMessage());
+                }
             }
-            save_upload($file, $target);
             json_out(['ok' => true, 'file' => "notes/$format/" . notes_file_name($songId, $page, $format)]);
         }
 

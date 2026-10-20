@@ -1,9 +1,9 @@
 {
-  "sha": "01d8020e3e1e532a0048a83c2a75e4879ef9efc8",
-  "shortSha": "01d8020",
+  "sha": "3f6f02587d31493db50e9aff49721f07588daf4e",
+  "shortSha": "3f6f025",
   "branch": "fix/sw-kill-switch",
-  "message": "Merge pull request #13 from kiritoshiro/review/code-security-2026-10-18",
-  "date": "2026-10-18T01:25:18+03:00",
+  "message": "Add a kill switch for the pre-July-2026 service worker",
+  "date": "2026-10-20T13:55:30+03:00",
   "dirty": true,
-  "builtAt": "2026-10-20T10:52:12.060Z"
+  "builtAt": "2026-10-20T11:54:34.364Z"
 }
