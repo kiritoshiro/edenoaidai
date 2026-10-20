@@ -239,8 +239,31 @@ page with its old JPG (mean grey difference; pages above `--threshold`, default
 Natos with only the AVIF format ticked. A rerun keeps pages already in the
 output folder (`--force` re-renders them). Media ZIP archives made before the
 switch contain `notes/jpg/` pages, which the archive import skips and counts.
-After checking the AVIF pages, `files/notes/jpg/` on the server can be deleted;
-the application no longer reads it.
+### Removing the old JPG pages
+
+The current application no longer reads `files/notes/jpg/`, but older copies
+of the app installed on phones still do:
+
+- Builds from before July 2026 load sheet music from
+  `https://adventistai.lt/giesmes/notes/<format>/<file>`. Since 2026-10-20 the
+  shared server's nginx (`/etc/nginx/snippets/adventistai-giesmes.conf`)
+  redirects those to `https://giesmynas.adventistai.lt/files/notes/<format>/<file>`.
+  These builds never update by themselves: their service worker
+  (`/service-worker.js?<version>`) serves the cached app shell, and the site
+  now answers that script URL with `index.html`, so the browser's update check
+  fails and the old worker stays.
+- Current builds that have not reloaded since the AVIF switch, and offline
+  snapshots saved before it, may still ask for `files/notes/jpg/` until the
+  page reloads (snapshots are then read as AVIF).
+
+So delete `files/notes/jpg/` only when the nginx access logs show no more
+`/giesmes/notes/jpg/` (adventistai.lt) and `/files/notes/jpg/` (giesmynas)
+requests, or first redirect those paths to the AVIF pages. The giesmynas
+redirect is commented out in `deploy/nginx-site.conf.example`; point the
+adventistai.lt snippet's `/giesmes/notes/jpg/` rule straight at
+`/files/notes/avif/<name>.avif` too, to avoid a double redirect. Old browsers
+without AVIF support (Safari before iOS 16) then see no JPG pages, but they can
+still choose SVG.
 
 ## Local development
 

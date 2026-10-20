@@ -40,3 +40,6 @@ deploying the application.
   are imported, songs show only #1.
 - Installed apps keep working with their saved data: a saved `jpg` page list is
   read as the matching AVIF pages, and a remembered JPG choice becomes #2.
+- Keep `files/notes/jpg/` until old installed app versions stop asking for it,
+  or redirect those requests to AVIF first (README, "Removing the old JPG
+  pages").
