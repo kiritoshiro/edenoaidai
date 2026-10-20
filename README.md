@@ -219,23 +219,28 @@ support. nginx must serve `.avif` as `image/avif`: check with
 `curl -sI https://<site>/files/notes/avif/<page>.avif`, and add
 `image/avif avif;` to nginx's `mime.types` if it is missing.
 
-### Converting the old JPG pages
+### Making the AVIF pages from the SVGs
 
-Before AVIF, raster pages lived in `files/notes/jpg/`. Convert them once (the
-command never overwrites an existing AVIF page and keeps the JPG files):
+The AVIF pages are rendered from the site's own SVG pages on a desktop
+computer, because the server cannot render SVG. Needs Node 22+, Edge or Chrome,
+and PHP with GD AVIF support (`php -r "var_dump(function_exists('imageavif'));"`):
 
 ```bash
-cd /home/giesmynas2/public_html
-sudo -u giesmynas2 php8.4 api/convert-notes-avif.php --dry-run
-sudo -u giesmynas2 php8.4 api/convert-notes-avif.php
+node scripts/notes-avif/render-notes-avif.mjs --only=1,51
+node scripts/notes-avif/render-notes-avif.mjs
 ```
 
-Each page takes about 1–2 seconds. Running it again only converts pages that
-are still missing. After checking the AVIF pages, `files/notes/jpg/` can be
-deleted; the application no longer reads it. Media ZIP archives made before
-the switch contain `notes/jpg/` pages, which the archive import skips and
-counts. To restore them, extract the JPG pages into `files/notes/jpg/` and run
-the command again.
+It reads the page list from the live `db.json` (or `--svg-dir=` / `--jpg-dir=`
+for local folders), renders each SVG at 1181×1811 px (200 dpi) on white with
+headless Edge/Chrome, encodes AVIF quality 60 with PHP GD, and compares each
+page with its old JPG (mean grey difference; pages above `--threshold`, default
+12/255, are listed as outliers). Output in `notes-avif-out/`: `notes/avif/`,
+`report.csv` and `notes-avif.zip`. Restore the ZIP in Admin → Duomenų bazė →
+Natos with only the AVIF format ticked. A rerun keeps pages already in the
+output folder (`--force` re-renders them). Media ZIP archives made before the
+switch contain `notes/jpg/` pages, which the archive import skips and counts.
+After checking the AVIF pages, `files/notes/jpg/` on the server can be deleted;
+the application no longer reads it.
 
 ## Local development
 

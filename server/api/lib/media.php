@@ -449,7 +449,8 @@ function media_import_archive(array $file, string $kind, array $selected): array
             if ($root !== $kind || !in_array($bucket, $selected, true)) {
                 // Archives made before the AVIF switch hold notes/jpg pages.
                 // Converting hundreds of pages would outlast the request, so
-                // they are only counted; api/convert-notes-avif.php converts them.
+                // they are only counted; AVIF pages are made from the SVGs
+                // with scripts/notes-avif/ and imported as an avif archive.
                 if ($kind === 'notes' && $root === 'notes' && $bucket === 'jpg') {
                     $legacyJpg++;
                 }

@@ -6,8 +6,8 @@ const SONG_ID_RE = '/^[A-Za-z0-9 _-]{1,20}$/';
 const TYPE_RE = '/^[a-z0-9&+_-]{1,40}$/i';
 // Sheet-music formats: vector SVG and raster AVIF (users see them as #1 and #2).
 const FORMATS = ['svg', 'avif'];
-// Keeps 200 dpi notes crisp (about 45 dB PSNR against the old JPG pages) at
-// roughly a quarter of the JPG size.
+// Keeps 200 dpi notes crisp (about 48–50 dB PSNR against a lossless render)
+// at roughly a quarter of the JPG size. scripts/notes-avif/ uses the same.
 const NOTE_AVIF_QUALITY = 60;
 // Sheet pages are about 2 megapixels; refuse anything far larger before GD
 // allocates it.
@@ -303,21 +303,18 @@ function is_avif_file(string $path): bool
 }
 
 /**
- * Convert a JPEG, PNG or WebP image to AVIF with GD. Transparency is
- * flattened onto white, as the old JPG pages were. Writes through a temporary
- * file in the target folder. Without $overwrite an existing target is never
- * replaced and false is returned instead.
+ * Convert an uploaded JPEG, PNG or WebP page to AVIF with GD, for pages that
+ * have no SVG to render from (the bulk pages are rendered from SVG on a
+ * desktop by scripts/notes-avif/). Transparency is flattened onto white.
+ * Writes through a temporary file in the target folder.
  *
  * @throws InvalidArgumentException when the source is not a supported image
  * @throws RuntimeException when GD cannot write AVIF or the file cannot be saved
  */
-function convert_image_to_avif(string $source, string $target, bool $overwrite): bool
+function convert_image_to_avif(string $source, string $target): void
 {
     if (!function_exists('imageavif')) {
         throw new RuntimeException('Serverio PHP GD plėtinys nepalaiko AVIF formato');
-    }
-    if (!$overwrite && file_exists($target)) {
-        return false;
     }
     $data = @file_get_contents($source);
     $info = $data === false ? false : @getimagesizefromstring($data);
@@ -357,24 +354,10 @@ function convert_image_to_avif(string $source, string $target, bool $overwrite):
         throw new RuntimeException('Nepavyko užkoduoti AVIF failo');
     }
     @chmod($temporary, 0644);
-    if ($overwrite) {
-        if (!rename($temporary, $target)) {
-            @unlink($temporary);
-            throw new RuntimeException('Nepavyko išsaugoti AVIF failo');
-        }
-        return true;
-    }
-    // link() fails when the target already exists, so a file that appeared
-    // while encoding is left alone.
-    $linked = @link($temporary, $target);
-    @unlink($temporary);
-    if (!$linked) {
-        if (file_exists($target)) {
-            return false;
-        }
+    if (!rename($temporary, $target)) {
+        @unlink($temporary);
         throw new RuntimeException('Nepavyko išsaugoti AVIF failo');
     }
-    return true;
 }
 
 function notes_file_name(string $songId, int $page, string $format): string

@@ -34,7 +34,9 @@ deploying the application.
 - The raster sheet-music format is AVIF (`files/notes/avif/`). JPG is no longer
   read or listed, and there is no JPG fallback; SVG stays as the other format.
 - Visitors see the formats as #1 (SVG) and #2 (AVIF).
-- After deploying, run `php api/convert-notes-avif.php` once (see README,
-  "Converting the old JPG pages"). Until it has run, songs show only #1.
+- The AVIF pages are rendered from the SVG pages on a desktop with
+  `scripts/notes-avif/render-notes-avif.mjs` and restored through the admin
+  media import (see README, "Making the AVIF pages from the SVGs"). Until they
+  are imported, songs show only #1.
 - Installed apps keep working with their saved data: a saved `jpg` page list is
   read as the matching AVIF pages, and a remembered JPG choice becomes #2.

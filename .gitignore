@@ -21,3 +21,6 @@ server/files/notes/**/*.svg
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local output of scripts/notes-avif/render-notes-avif.mjs
+notes-avif-out/

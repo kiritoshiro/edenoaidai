@@ -395,8 +395,8 @@ export default {
                 const result = await api.importMedia(this.restoreKind, values, this.mediaFile);
                 const skipped = result.skipped ? `, praleista ${result.skipped}` : '';
                 const legacy = result.legacyJpg
-                    ? ` Archyve yra ${result.legacyJpg} senų JPG natų failų: jie neįkelti, ` +
-                      'į AVIF juos paverčia serverio komanda api/convert-notes-avif.php.'
+                    ? ` Archyve yra ${result.legacyJpg} senų JPG natų failų: jie neįkelti. ` +
+                      'AVIF natos daromos iš SVG įrankiu scripts/notes-avif arba įkeliamos po vieną.'
                     : '';
                 const message = `Įkelta ${result.imported} failų${skipped}.${legacy}`;
                 // The legacy notice stays until the next action instead of

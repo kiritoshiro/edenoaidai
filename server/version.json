@@ -1,9 +1,9 @@
 {
-  "sha": "01d8020e3e1e532a0048a83c2a75e4879ef9efc8",
-  "shortSha": "01d8020",
+  "sha": "49cec7dfa84d64953cfc51a443476663075bfb26",
+  "shortSha": "49cec7d",
   "branch": "feature/avif-sheet-music",
-  "message": "Merge pull request #13 from kiritoshiro/review/code-security-2026-10-18",
-  "date": "2026-10-18T01:25:18+03:00",
+  "message": "Switch sheet-music raster pages from JPG to AVIF; label formats #1/#2",
+  "date": "2026-10-20T13:33:47+03:00",
   "dirty": true,
-  "builtAt": "2026-10-20T10:33:12.454Z"
+  "builtAt": "2026-10-20T10:44:30.709Z"
 }

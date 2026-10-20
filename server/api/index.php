@@ -626,7 +626,7 @@ if ($first === 'files' && count($segments) === 4) {
                 // JPG, PNG and WebP pages are converted, so the raster folder
                 // only ever holds AVIF.
                 try {
-                    convert_image_to_avif($file['tmp_name'], $target, true);
+                    convert_image_to_avif($file['tmp_name'], $target);
                 } catch (InvalidArgumentException $e) {
                     fail(400, $e->getMessage());
                 } catch (RuntimeException $e) {
