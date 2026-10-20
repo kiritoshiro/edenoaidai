@@ -451,17 +451,56 @@ function media_import_budget(int $archiveBytes): int
 }
 
 /**
+ * Take the media import lock: one archive installs (or rolls back) at a
+ * time, so a failing import can never restore its backups over a file that
+ * a concurrent import has just installed. Waits up to $waitSeconds.
+ *
+ * @return resource
+ */
+function media_import_lock(float $waitSeconds)
+{
+    $dir = storage_dir();
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        throw new RuntimeException('Nepavyko sukurti storage aplanko');
+    }
+    $handle = fopen($dir . '/media-import.lock', 'c');
+    if ($handle === false) {
+        throw new RuntimeException('Nepavyko atidaryti media importo užrakto');
+    }
+    $deadline = microtime(true) + $waitSeconds;
+    while (!flock($handle, LOCK_EX | LOCK_NB)) {
+        if (microtime(true) >= $deadline) {
+            fclose($handle);
+            throw new RuntimeException('Kitas media archyvo importas dar vyksta; pabandykite vėliau');
+        }
+        usleep(200000);
+    }
+    return $handle;
+}
+
+/** @param resource $handle */
+function media_import_unlock($handle): void
+{
+    flock($handle, LOCK_UN);
+    fclose($handle);
+}
+
+/**
  * Move unpacked files into place all-or-nothing. Each existing target is
  * moved aside first; if any step fails, every target is put back as it was
  * (replaced files restored, new files removed) before the error is passed on.
- * A backup that cannot be restored is kept, and its path is reported.
+ * Anything rollback cannot undo is kept and named in the error. Call it while
+ * holding media_import_lock().
  *
  * @param array<string, string> $temporaries temporary file => target
- * @param ?callable(string, string): bool $rename rename(); tests inject failures
+ * @param array{rename?: callable(string, string): bool, unlink?: callable(string): bool} $operations
+ *        file operations; tests inject failures
+ * @return list<string> backups left behind after a successful install
  */
-function media_install_files(array $temporaries, ?callable $rename = null): void
+function media_install_files(array $temporaries, array $operations = []): array
 {
-    $rename ??= 'rename';
+    $rename = $operations['rename'] ?? 'rename';
+    $unlink = $operations['unlink'] ?? 'unlink';
     $journal = [];
     try {
         foreach ($temporaries as $temporary => $target) {
@@ -481,33 +520,50 @@ function media_install_files(array $temporaries, ?callable $rename = null): void
             }
         }
     } catch (Throwable $e) {
-        $kept = [];
+        $notRestored = [];
+        $notRemoved = [];
         foreach (array_reverse($journal) as [$target, $backup]) {
             if ($backup === null) {
-                @unlink($target);
+                // A new target that was never installed is not there to remove.
+                if (file_exists($target) && !@$unlink($target)) {
+                    $notRemoved[] = $target;
+                }
             } elseif (!@$rename($backup, $target)) {
-                $kept[] = $backup;
+                $notRestored[] = $backup;
             }
         }
-        if ($kept !== []) {
+        if ($notRestored !== [] || $notRemoved !== []) {
+            $problems = [];
+            if ($notRestored !== []) {
+                $problems[] = 'ankstesnių failų nepavyko atkurti, jų kopijos liko: ' . implode(', ', $notRestored);
+            }
+            if ($notRemoved !== []) {
+                $problems[] = 'naujai įkeltų failų nepavyko pašalinti: ' . implode(', ', $notRemoved);
+            }
             throw new RuntimeException(
-                'Nepavyko išsaugoti media failų, o ankstesnių failų nepavyko atkurti; '
-                . 'jų kopijos liko: ' . implode(', ', $kept),
+                'Nepavyko išsaugoti media failų, o atšaukimas nepavyko iki galo; ' . implode('; ', $problems),
                 0,
                 $e,
             );
         }
         throw $e;
     }
+    $leftovers = [];
     foreach ($journal as [, $backup]) {
-        if ($backup !== null) {
-            @unlink($backup);
+        if ($backup !== null && !@$unlink($backup)) {
+            $leftovers[] = $backup;
+            error_log('[edeno-aidai] Media import: could not delete backup ' . $backup);
         }
     }
+    return $leftovers;
 }
 
-/** @param ?callable(string, string): bool $rename passed to media_install_files() */
-function media_import_archive(array $file, string $kind, array $selected, ?callable $rename = null): array
+/**
+ * @param array{rename?: callable, unlink?: callable, lockWait?: float} $options
+ *        test seams: file operations for media_install_files() and how long
+ *        to wait for the import lock (default 60 s)
+ */
+function media_import_archive(array $file, string $kind, array $selected, array $options = []): array
 {
     if (!class_exists('ZipArchive')) {
         throw new RuntimeException('Archyvams serveryje reikalingas PHP zip plėtinys');
@@ -528,6 +584,7 @@ function media_import_archive(array $file, string $kind, array $selected, ?calla
     $legacyJpg = 0;
     $declaredBytes = 0;
     $temporaries = [];
+    $warnings = [];
     $budget = media_import_budget((int) @filesize((string) $file['tmp_name']));
     try {
         for ($index = 0; $index < $zip->numFiles; $index++) {
@@ -629,7 +686,12 @@ function media_import_archive(array $file, string $kind, array $selected, ?calla
                 }
             }
         }
-        media_install_files($temporaries, $rename);
+        $lock = media_import_lock((float) ($options['lockWait'] ?? 60));
+        try {
+            $warnings = media_install_files($temporaries, $options);
+        } finally {
+            media_import_unlock($lock);
+        }
         $temporaries = [];
     } finally {
         foreach (array_keys($temporaries) as $temporary) {
@@ -645,5 +707,7 @@ function media_import_archive(array $file, string $kind, array $selected, ?calla
         'imported' => count($entries),
         'skipped' => $skipped,
         'legacyJpg' => $legacyJpg,
+        // Backups that could not be deleted after a successful import.
+        'warnings' => $warnings,
     ];
 }

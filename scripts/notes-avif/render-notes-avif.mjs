@@ -426,7 +426,8 @@ async function main() {
         console.log(`\n${signal}: stopping; finished pages are kept for the next run.`);
         Promise.allSettled([saveSources(), ...[...cleanups].map(cleanup => cleanup())])
             .then(() => rm(folders.work, { recursive: true, force: true }).catch(() => {}))
-            .finally(() => process.exit(130));
+            // The shell convention: 128 + the signal number.
+            .finally(() => process.exit(signal === 'SIGTERM' ? 143 : 130));
     };
     process.once('SIGINT', () => stop('SIGINT'));
     process.once('SIGTERM', () => stop('SIGTERM'));

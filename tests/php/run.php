@@ -308,7 +308,7 @@ try {
             && !file_exists("$files/notes/svg/63.svg");
         foreach ([2 => 'installing the first file', 3 => 'moving a later file aside', 5 => 'installing the last (new) file'] as $at => $step) {
             $resetTargets();
-            $error = thrown(fn () => media_import_archive($upload($installZip), 'notes', ['svg'], $failingAt([$at])));
+            $error = thrown(fn () => media_import_archive($upload($installZip), 'notes', ['svg'], ['rename' => $failingAt([$at])]));
             $dotFiles = array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.'));
             check($error === RuntimeException::class && $unchanged() && $dotFiles === [],
                 "install: rename failure while $step leaves every file as it was, no temp/backup files");
@@ -316,7 +316,7 @@ try {
 
         $resetTargets();
         try {
-            media_import_archive($upload($installZip), 'notes', ['svg'], $failingAt([5, 6]));
+            media_import_archive($upload($installZip), 'notes', ['svg'], ['rename' => $failingAt([5, 6])]);
             $message = '';
         } catch (RuntimeException $e) {
             $message = $e->getMessage();
@@ -335,8 +335,70 @@ try {
         $result = media_import_archive($upload($installZip), 'notes', ['svg']);
         $dotFiles = array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.'));
         check($result['imported'] === 3 && str_contains(file_get_contents("$files/notes/svg/62.svg"), 'new 62')
-            && file_exists("$files/notes/svg/63.svg") && $dotFiles === [],
+            && file_exists("$files/notes/svg/63.svg") && $dotFiles === [] && $result['warnings'] === [],
             'install: a successful import replaces the files and leaves no backups');
+
+        // A new file that rollback cannot delete is named in the error.
+        $resetTargets();
+        $newFirstZip = make_zip("$work/new-first.zip", [
+            'notes/svg/64.svg' => $svg . '<!-- new 64 -->',
+            'notes/svg/61.svg' => $svg . '<!-- new 61 -->',
+        ]);
+        // rename() calls: 64 in, 61 aside, 61 in (fails), 61 restored.
+        $refuseUnlink = fn (string $match) => fn (string $path): bool => !str_ends_with($path, $match) && unlink($path);
+        try {
+            media_import_archive($upload($newFirstZip), 'notes', ['svg'],
+                ['rename' => $failingAt([3]), 'unlink' => $refuseUnlink('64.svg')]);
+            $message = '';
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
+        }
+        $dotFiles = array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.'));
+        check(str_contains($message, '64.svg') && file_exists("$files/notes/svg/64.svg")
+            && file_get_contents("$files/notes/svg/61.svg") === $originals['61.svg'] && $dotFiles === [],
+            'install: a new file rollback cannot remove is named in the error; the rest is restored');
+        @unlink("$files/notes/svg/64.svg");
+
+        // A backup that cannot be deleted after success is returned as a warning.
+        $resetTargets();
+        $refuseBackups = fn (string $path): bool => !str_starts_with(basename($path), '.') && unlink($path);
+        $result = media_import_archive($upload($installZip), 'notes', ['svg'], ['unlink' => $refuseBackups]);
+        $dotFiles = array_values(array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.')));
+        $warned = array_map('basename', $result['warnings']);
+        sort($warned);
+        sort($dotFiles);
+        check(count($result['warnings']) === 2 && $warned === $dotFiles
+            && str_contains(file_get_contents("$files/notes/svg/61.svg"), 'new 61'),
+            'install: backups that cannot be deleted are returned as warnings, the import still succeeds');
+        foreach ($dotFiles as $name) {
+            unlink("$files/notes/svg/$name");
+        }
+
+        // One import at a time: while another holds the lock, an import waits
+        // and then gives up without touching any file.
+        $resetTargets();
+        @mkdir("$work/storage", 0777, true);
+        $held = fopen("$work/storage/media-import.lock", 'c');
+        flock($held, LOCK_EX);
+        $started = microtime(true);
+        try {
+            media_import_archive($upload($installZip), 'notes', ['svg'], ['lockWait' => 0.5]);
+            $message = '';
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
+        }
+        $waited = microtime(true) - $started;
+        $dotFiles = array_filter(notes_folder('svg'), fn ($name) => str_starts_with($name, '.'));
+        check(str_contains($message, 'importas dar vyksta') && $waited >= 0.4 && $unchanged() && $dotFiles === [],
+            sprintf('lock: an import waits for the lock (%.1f s), then fails without changing files', $waited));
+        flock($held, LOCK_UN);
+        fclose($held);
+        $result = media_import_archive($upload($installZip), 'notes', ['svg'], ['lockWait' => 0.5]);
+        check($result['imported'] === 3, 'lock: once released, the next import goes ahead');
+        $resetTargets();
+        thrown(fn () => media_import_archive($upload($installZip), 'notes', ['svg'], ['rename' => $failingAt([5])]));
+        $result = media_import_archive($upload($installZip), 'notes', ['svg'], ['lockWait' => 0.5]);
+        check($result['imported'] === 3, 'lock: a failed import releases the lock too');
 
         $leftovers = array_filter(array_merge(notes_folder('svg'), notes_folder('avif')), fn ($name) => str_starts_with($name, '.'));
         check($leftovers === [], 'import: no temporary files left behind');
