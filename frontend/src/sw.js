@@ -33,6 +33,14 @@ registerRoute(
     new NetworkOnly(),
 );
 
+// Media URLs carry the file's version (?v=<mtime>), so a replaced file is
+// fetched again online. Offline, a copy cached under another version – or
+// from before URLs had one – is still better than no recording or notes.
+const otherCachedVersion = cacheName => ({
+    handlerDidError: async ({ request }) =>
+        (await caches.open(cacheName)).match(request.url, { ignoreSearch: true }),
+});
+
 // Audio (mp3) – cache-first so hymns work offline.
 // The "Atnaujinti duomenis" flow deletes this cache to force fresh files.
 registerRoute(
@@ -41,6 +49,7 @@ registerRoute(
     new CacheFirst({
         cacheName: 'audio-v1',
         plugins: [
+            otherCachedVersion('audio-v1'),
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new RangeRequestsPlugin(),
             new ExpirationPlugin({
@@ -59,6 +68,7 @@ registerRoute(
     new CacheFirst({
         cacheName: 'notes-v1',
         plugins: [
+            otherCachedVersion('notes-v1'),
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new ExpirationPlugin({
                 maxEntries: 300,

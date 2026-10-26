@@ -44,9 +44,9 @@ import { db } from '../db';
 import {
     downloadData,
     fetchDataVersion,
+    runExclusive,
     saveData,
     setDataVersion,
-    waitForDataUpdate,
 } from '../lib/dataSync';
 import { setAppTheme } from '../lib/theme';
 
@@ -100,26 +100,7 @@ export default {
                 }
 
                 this.message = 'Siunčiama giesmių duomenų bazė…';
-                await waitForDataUpdate();
-                // Read before the data, so the stored version is never newer
-                // than it; background checks then pick up later changes
-                const version = await fetchDataVersion().catch(() => '');
-                const { songs, tracks, tracksLoaded } = await downloadData({
-                    requireTracks: false,
-                });
-
-                this.message = 'Įrašoma…';
-                this.total = songs.length;
-                this.current = 0;
-                // Unset while saving: if it fails part-way, the next check
-                // must not take the half-written data for current
-                setDataVersion('');
-                await saveData(songs, tracks, current => {
-                    this.current = current;
-                });
-                // Without the recordings, leave the version unset so the
-                // next background check fetches them
-                setDataVersion(tracksLoaded ? version : '');
+                await runExclusive(() => this.importData());
 
                 if (refresh) {
                     this.message = 'Tikrinama nauja programėlės versija…';
@@ -187,6 +168,29 @@ export default {
                 // offline or service workers are unavailable.
                 console.warn('Nepavyko patikrinti programėlės kodo:', error);
             }
+        },
+
+        // Runs under the shared import lock (see runExclusive)
+        async importData() {
+            // Read before the data, so the stored version is never newer
+            // than it; background checks then pick up later changes
+            const version = await fetchDataVersion().catch(() => '');
+            const { songs, tracks, tracksLoaded } = await downloadData({
+                requireTracks: false,
+            });
+
+            this.message = 'Įrašoma…';
+            this.total = songs.length;
+            this.current = 0;
+            // Unset while saving: if it fails part-way, the next check must
+            // not take the half-written data for current
+            setDataVersion('');
+            await saveData(songs, tracks, current => {
+                this.current = current;
+            });
+            // Without the recordings, leave the version unset so the next
+            // background check fetches them
+            setDataVersion(tracksLoaded ? version : '');
         },
 
         success(refresh = false) {

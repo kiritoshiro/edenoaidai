@@ -1,6 +1,7 @@
 import { db, isInstalled, setTrackTypes } from '../db';
 import { config } from './config';
 import { buildSongRows, buildTrackTypes } from './dataRows';
+import { createExclusive } from './exclusive';
 
 // Fired on window after a background check imported new data
 export const DATA_UPDATED_EVENT = 'edeno:data-updated';
@@ -9,7 +10,6 @@ const DATA_VERSION_KEY = 'dataVersion';
 const MIN_CHECK_INTERVAL = 60 * 1000;
 
 let lastCheck = 0;
-let running = null;
 
 export async function fetchJson(url) {
     if (!url) {
@@ -92,17 +92,17 @@ export function setDataVersion(version) {
     }
 }
 
-// The install page waits for a background import already under way, so
-// that import can't finish later and overwrite what the install saved.
-export function waitForDataUpdate() {
-    return running || Promise.resolve(false);
-}
+// One import at a time, shared by background checks and the install page,
+// so an older download can never be saved over a newer one. The install
+// may outlive its page (the navbar stays usable), so the lock is held here
+// rather than by checking the current route.
+export const runExclusive = createExclusive();
 
 // Asks the server whether songs or media files changed and, if so, imports
 // them quietly. Settings and offline caches stay; nothing is reloaded.
 // Resolves to true when new data was imported.
 export function checkForDataUpdate({ force = false } = {}) {
-    if (running) return running;
+    if (runExclusive.busy()) return Promise.resolve(false);
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         return Promise.resolve(false);
     }
@@ -111,15 +111,10 @@ export function checkForDataUpdate({ force = false } = {}) {
     }
 
     lastCheck = Date.now();
-    running = updateData()
-        .catch(error => {
-            console.warn('Nepavyko patikrinti giesmių atnaujinimų:', error);
-            return false;
-        })
-        .finally(() => {
-            running = null;
-        });
-    return running;
+    return runExclusive(updateData).catch(error => {
+        console.warn('Nepavyko patikrinti giesmių atnaujinimų:', error);
+        return false;
+    });
 }
 
 async function updateData() {

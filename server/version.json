@@ -1,9 +1,9 @@
 {
-  "sha": "cc05393bb0875ab7b2b78745f2967ec4e9afce82",
-  "shortSha": "cc05393",
+  "sha": "451c5dab73f6a9d9320f862a22e96d4aa08271f0",
+  "shortSha": "451c5da",
   "branch": "feat/auto-data-sync",
-  "message": "Merge remote-tracking branch 'origin/v2' into feat/auto-data-sync",
-  "date": "2026-10-26T09:51:06+02:00",
-  "dirty": false,
-  "builtAt": "2026-10-26T07:51:28.391Z"
+  "message": "Rebuild after merging v2 (vite 7.3.7)",
+  "date": "2026-10-26T09:51:36+02:00",
+  "dirty": true,
+  "builtAt": "2026-10-26T08:04:04.739Z"
 }
