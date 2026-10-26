@@ -9,7 +9,10 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkOnly, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
-import { RangeRequestsPlugin } from 'workbox-range-requests';
+import {
+    createPartialResponse,
+    RangeRequestsPlugin,
+} from 'workbox-range-requests';
 
 self.skipWaiting();
 clientsClaim();
@@ -33,6 +36,22 @@ registerRoute(
     new NetworkOnly(),
 );
 
+// Media URLs carry the file's version (?v=<mtime>), so a replaced file is
+// fetched again online. Offline, a copy cached under another version – or
+// from before URLs had one – is still better than no recording or notes.
+const otherCachedVersion = cacheName => ({
+    handlerDidError: async ({ request }) => {
+        const cached = await (await caches.open(cacheName)).match(request.url, {
+            ignoreSearch: true,
+        });
+        // RangeRequestsPlugin doesn't see responses from here, so cut the
+        // byte range players ask for (seeking) the same way it would
+        return cached && request.headers.has('range')
+            ? createPartialResponse(request, cached)
+            : cached;
+    },
+});
+
 // Audio (mp3) – cache-first so hymns work offline.
 // The "Atnaujinti duomenis" flow deletes this cache to force fresh files.
 registerRoute(
@@ -41,6 +60,7 @@ registerRoute(
     new CacheFirst({
         cacheName: 'audio-v1',
         plugins: [
+            otherCachedVersion('audio-v1'),
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new RangeRequestsPlugin(),
             new ExpirationPlugin({
@@ -59,6 +79,7 @@ registerRoute(
     new CacheFirst({
         cacheName: 'notes-v1',
         plugins: [
+            otherCachedVersion('notes-v1'),
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new ExpirationPlugin({
                 maxEntries: 300,

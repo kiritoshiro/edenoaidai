@@ -1,9 +1,10 @@
 <template>
     <div class="list">
+        <!-- Keyed by songId: a data update re-creates the rows with new ids -->
         <article
             v-for="song in songs"
             :id="`song-${song.songId}`"
-            :key="song.id"
+            :key="song.songId"
             class="element"
         >
             <router-link class="element__main" :to="`/song/${song.songId}`">

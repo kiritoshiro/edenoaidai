@@ -7,18 +7,67 @@
         </router-view>
     </main>
     <navbar v-if="!isAdmin" />
+    <div class="data-notice" role="status" aria-live="polite">
+        <span v-if="dataNoticeVisible" class="data-notice__text">
+            Giesmių duomenys atnaujinti
+        </span>
+    </div>
 </template>
 
 <script>
 import Navbar from './components/Navbar.vue';
+import { checkForDataUpdate, DATA_UPDATED_EVENT } from './lib/dataSync';
+
+const DATA_CHECK_INTERVAL = 10 * 60 * 1000;
+const DATA_NOTICE_DURATION = 3000;
 
 export default {
     components: {
         Navbar,
     },
+    data() {
+        return {
+            dataNoticeVisible: false,
+        };
+    },
     computed: {
         isAdmin() {
             return this.$route.path.startsWith('/admin');
+        },
+    },
+    mounted() {
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
+        window.addEventListener('online', this.checkData);
+        window.addEventListener(DATA_UPDATED_EVENT, this.showDataNotice);
+        this.dataCheckTimer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') this.checkData();
+        }, DATA_CHECK_INTERVAL);
+        // The first route decides whether a check makes sense at all
+        this.$router.isReady().then(this.checkData);
+    },
+    beforeUnmount() {
+        document.removeEventListener('visibilitychange', this.onVisibilityChange);
+        window.removeEventListener('online', this.checkData);
+        window.removeEventListener(DATA_UPDATED_EVENT, this.showDataNotice);
+        window.clearInterval(this.dataCheckTimer);
+        window.clearTimeout(this.dataNoticeTimer);
+    },
+    methods: {
+        // Not while installing (that flow imports everything itself) nor in
+        // the admin, which reads the API directly
+        checkData() {
+            if (this.isAdmin || this.$route.name === 'install') return;
+            checkForDataUpdate();
+        },
+        onVisibilityChange() {
+            if (document.visibilityState === 'visible') this.checkData();
+        },
+        showDataNotice() {
+            this.dataNoticeVisible = true;
+            window.clearTimeout(this.dataNoticeTimer);
+            this.dataNoticeTimer = window.setTimeout(() => {
+                this.dataNoticeVisible = false;
+            }, DATA_NOTICE_DURATION);
         },
     },
 };
@@ -188,6 +237,43 @@ main {
 
 :root[data-theme='dark'] .icon-audio--img {
     filter: invert(1) brightness(1.15);
+}
+
+// Floats above the bottom navigation, so showing it never moves the page.
+// Below the navbar and every overlay (slideshow, sheet-music viewer).
+.data-notice {
+    position: fixed;
+    left: 50%;
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 78px);
+    z-index: 90;
+    transform: translateX(-50%);
+    pointer-events: none;
+
+    &__text {
+        display: block;
+        padding: 9px 16px;
+        border: 1px solid var(--app-border);
+        border-radius: 999px;
+        color: var(--app-text);
+        background: var(--app-surface);
+        box-shadow: var(--app-shadow-small);
+        font-size: 14px;
+        white-space: nowrap;
+        animation: data-notice-in 0.2s ease;
+    }
+}
+
+@keyframes data-notice-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .data-notice__text {
+        animation: none;
+    }
 }
 
 @media (max-width: 600px) {

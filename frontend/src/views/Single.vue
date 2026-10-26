@@ -170,7 +170,7 @@
                     @timeupdate="syncAudioTime"
                     @play="audioPlaying = true"
                     @pause="audioPlaying = false"
-                    @ended="audioPlaying = false"
+                    @ended="onAudioEnded"
                 ></audio>
 
                 <div class="song-audio__controls">
@@ -1034,8 +1034,12 @@
 </template>
 
 <script>
+import { getTrackTypes } from '../db';
 import { config } from '../lib/config';
+import { audioVersionsByType } from '../lib/dataRows';
+import { DATA_UPDATED_EVENT } from '../lib/dataSync';
 import { lyricsToPlainText } from '../lib/lyrics';
+import { withVersion } from '../lib/mediaUrl';
 import {
     availableNoteFormats,
     normalizeNoteFormat,
@@ -1165,6 +1169,10 @@ export default {
             notesZoom: 1,
             previousNotesBodyOverflow: '',
             selectedAudioType: '',
+            audioTypesSongId: '',
+            audioVersions: audioVersionsByType(getTrackTypes()),
+            // Newer versions held back while a recording is in use
+            pendingAudioVersions: null,
             audioPlaying: false,
             audioCurrentTime: 0,
             audioDuration: 0,
@@ -1265,10 +1273,14 @@ export default {
         imageUrls() {
             if (!this.song) return [];
             const base = `${config.notesBase}/${this.imageType}/${this.song.songId}`;
+            const versions = this.song.noteVersions?.[this.imageType] || {};
             return this.notePageIndexes.map(page =>
-                page === 0
-                    ? `${base}.${this.imageType}`
-                    : `${base}_${page}.${this.imageType}`,
+                withVersion(
+                    page === 0
+                        ? `${base}.${this.imageType}`
+                        : `${base}_${page}.${this.imageType}`,
+                    versions[page],
+                ),
             );
         },
         currentIndex() {
@@ -1474,12 +1486,22 @@ export default {
             }
             this.closeNotesFullscreen();
             this.resetAudioState();
+            this.applyPendingAudioVersions();
             if (!this.presenterConnected) this.closeSlideshow();
             this.fetchTrackLabels();
             this.fetchSong();
         },
-        imageUrls(value) {
-            this.resetImages();
+        imageUrls(value, previous = []) {
+            // Pages are keyed by URL, so an unchanged page keeps its <img>
+            // and never fires "load" again: keep its state, reset the rest
+            const loaded = new Map();
+            const errored = new Map();
+            previous.forEach((url, index) => {
+                loaded.set(url, this.imageLoaded[index]);
+                errored.set(url, this.imageErrored[index]);
+            });
+            this.imageLoaded = value.map(url => loaded.get(url) === true);
+            this.imageErrored = value.map(url => errored.get(url) === true);
             if (value.length === 0) this.closeNotesFullscreen();
         },
         notesVisible(value) {
@@ -1492,6 +1514,13 @@ export default {
                 : formats[0] || this.preferredNoteFormat;
         },
         audioTypes(types) {
+            // A data update re-reads the open song: keep the recording the
+            // user picked (and its playback) while it still exists
+            const songId = this.song?.songId || '';
+            const sameSong = songId === this.audioTypesSongId;
+            this.audioTypesSongId = songId;
+            if (sameSong && types.includes(this.selectedAudioType)) return;
+
             const requested = String(this.$route.query.audio || '');
             if (types.includes(requested)) {
                 this.selectedAudioType = requested;
@@ -1501,6 +1530,7 @@ export default {
             if (types.length === 0) this.resetAudioState();
         },
         selectedAudioType() {
+            this.applyPendingAudioVersions();
             this.onAudioVersionChange();
         },
         fontSize(value) {
@@ -1571,6 +1601,7 @@ export default {
         this.fetchSongIds();
         this.fetchTrackLabels();
         this.fetchSong();
+        window.addEventListener(DATA_UPDATED_EVENT, this.onDataUpdated);
     },
     mounted() {
         document.addEventListener('keydown', this.onSlideshowKeydown);
@@ -1615,6 +1646,7 @@ export default {
         next();
     },
     beforeUnmount() {
+        window.removeEventListener(DATA_UPDATED_EVENT, this.onDataUpdated);
         document.removeEventListener('keydown', this.onSlideshowKeydown);
         document.removeEventListener('keydown', this.onSongNavigationKeydown);
         document.removeEventListener('keyup', this.onSongNavigationKeyup);
@@ -2800,7 +2832,59 @@ body.light .zone{color:rgba(46,32,13,.72)}
             return `${minutes}:${String(remainder).padStart(2, '0')}`;
         },
         audioUrl(type) {
-            return `${config.audioBase}/${type}/${this.song.songId}.mp3`;
+            return withVersion(
+                `${config.audioBase}/${type}/${this.song.songId}.mp3`,
+                this.audioVersions[type]?.[this.song.songId],
+            );
+        },
+        onAudioEnded() {
+            this.audioPlaying = false;
+            this.applyPendingAudioVersions();
+        },
+        // A changed recording URL makes the element load the new file, so
+        // it waits while the current one is playing or part-way through.
+        applyPendingAudioVersions() {
+            if (!this.pendingAudioVersions) return;
+            this.audioVersions = this.pendingAudioVersions;
+            this.pendingAudioVersions = null;
+        },
+        // A background update imported new data while this song is open
+        onDataUpdated() {
+            const versions = audioVersionsByType(getTrackTypes());
+            const audio = this.$refs.audioElement;
+            if (audio && (!audio.paused || audio.currentTime > 0)) {
+                this.pendingAudioVersions = versions;
+            } else {
+                this.audioVersions = versions;
+                this.pendingAudioVersions = null;
+            }
+            this.fetchSongIds();
+            this.fetchTrackLabels();
+            this.refreshSong();
+        },
+        // Like fetchSong, but keeps the slide position and open views.
+        // A song removed on the server shows the usual "not found" state.
+        refreshSong() {
+            const requestedSongId = this.songId;
+            this.$songs
+                .where('songId')
+                .equals(requestedSongId)
+                .first()
+                .then(song => {
+                    if (requestedSongId !== this.songId) return;
+                    // The slideshow and presenter window read the song
+                    // directly; close them before it goes away
+                    if (!song) this.closeSlideshow();
+                    this.song = song || null;
+                    this.prepareSlideshowOptions();
+                    this.$nextTick(() => {
+                        this.scheduleHeadingFit();
+                        this.scheduleSlideFit();
+                        this.scheduleSlideValidation();
+                        this.renderPresenterWindow();
+                    });
+                })
+                .catch(error => console.error(error));
         },
         fetchSongIds() {
             this.$songs
@@ -2850,11 +2934,16 @@ body.light .zone{color:rgba(46,32,13,.72)}
             if (songId) this.$router.push(`/song/${songId}`);
         },
         toggleFavorite() {
-            const next = this.song.favorited ? 0 : 1;
+            const song = this.song;
+            const next = song.favorited ? 0 : 1;
+            // By songId: a data update re-creates the rows with new ids,
+            // and a click during one must still find its song
             this.$songs
-                .update(this.song.id, { favorited: next })
+                .where('songId')
+                .equals(song.songId)
+                .modify({ favorited: next })
                 .then(updated => {
-                    if (updated) this.song.favorited = next;
+                    if (updated) song.favorited = next;
                 })
                 .catch(error => console.error(error));
         },

@@ -103,7 +103,7 @@ if ($segments === [] && $method === 'GET') {
     json_out(['name' => 'Edeno Aidai backend (PHP)', 'ok' => true]);
 }
 
-// GET /api/public/db.json  |  /api/public/tracks.json
+// GET /api/public/db.json  |  /api/public/tracks.json  |  /api/public/version.json
 if ($first === 'public' && $method === 'GET' && count($segments) === 2) {
     $db = pdo();
     if ($segments[1] === 'db.json') {
@@ -113,6 +113,11 @@ if ($first === 'public' && $method === 'GET' && count($segments) === 2) {
         // Aplankai indeksuojami kiekvieną kartą atnaujinant programėlės duomenis.
         sync_audio_library($db);
         json_out(build_public_tracks($db));
+    }
+    if ($segments[1] === 'version.json') {
+        // Installed apps poll this to notice changed songs or media files.
+        sync_audio_library($db);
+        json_out(['version' => public_data_version(build_public_db($db), build_public_tracks($db))]);
     }
 }
 
