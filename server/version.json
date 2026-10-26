@@ -1,9 +1,9 @@
 {
-  "sha": "3f6f02587d31493db50e9aff49721f07588daf4e",
-  "shortSha": "3f6f025",
-  "branch": "fix/sw-kill-switch",
-  "message": "Add a kill switch for the pre-July-2026 service worker",
-  "date": "2026-10-20T13:55:30+03:00",
+  "sha": "e2d77157d5a949c01a22ead61aa64acd95984b6c",
+  "shortSha": "e2d7715",
+  "branch": "feat/auto-data-sync",
+  "message": "Merge pull request #16 from kiritoshiro/fix/sw-kill-switch",
+  "date": "2026-10-20T22:39:18+03:00",
   "dirty": true,
-  "builtAt": "2026-10-20T11:54:34.364Z"
+  "builtAt": "2026-10-26T07:14:31.248Z"
 }

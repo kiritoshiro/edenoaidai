@@ -41,7 +41,7 @@ jobs:
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
           php-version: "8.4"
-          extensions: gd, zip
+          extensions: gd, zip, pdo_sqlite
 
       - name: php -l every file
         run: find server/api scripts tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l

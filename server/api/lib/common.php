@@ -484,16 +484,17 @@ function notes_file_name(string $songId, int $page, string $format): string
 }
 
 // db.json asks for every song's note pages, so list each format folder once
-// per request instead of checking 9 file names per song.
-function note_file_index(string $format): array
+// per request instead of checking 9 file names per song. Maps file name to
+// modification time; $refresh re-reads a folder changed during the request.
+function note_file_index(string $format, bool $refresh = false): array
 {
     static $index = [];
-    if (!isset($index[$format])) {
+    if ($refresh || !isset($index[$format])) {
         $folder = files_dir() . "/notes/$format";
         $index[$format] = [];
         foreach (scandir($folder) ?: [] as $entry) {
             if (is_file("$folder/$entry")) {
-                $index[$format][$entry] = true;
+                $index[$format][$entry] = (int) filemtime("$folder/$entry");
             }
         }
     }
@@ -519,6 +520,23 @@ function note_pages_for_song(string $songId): array
         $result[$format] = note_pages_for_format($songId, $format);
     }
     return $result;
+}
+
+// Clients add the time to the file URL, so a page replaced under the same
+// name is downloaded again instead of served from their offline cache.
+function note_versions_for_song(string $songId, array $notePages): array
+{
+    $versions = [];
+    foreach ($notePages as $format => $pages) {
+        $files = note_file_index($format);
+        $times = [];
+        foreach ($pages as $page) {
+            $times[$page] = $files[notes_file_name($songId, $page, $format)] ?? 0;
+        }
+        // Page numbers start at 0, which json_encode would turn into a list
+        $versions[$format] = (object) $times;
+    }
+    return $versions;
 }
 
 function detected_note_page_count(array $notePages): int
@@ -1107,17 +1125,55 @@ function track_to_api(PDO $db, array $row): array
     ];
 }
 
+// MP3 modification times of one recording type, keyed by song number, from
+// a single listing of its folder.
+function audio_file_versions(string $type): array
+{
+    $folder = audio_dir() . "/$type";
+    $versions = [];
+    // A folder removed since the last audio sync is simply empty
+    foreach ((is_dir($folder) ? scandir($folder) : false) ?: [] as $file) {
+        $path = "$folder/$file";
+        if (!is_file($path) || strtolower(pathinfo($file, PATHINFO_EXTENSION)) !== 'mp3') {
+            continue;
+        }
+        $versions[trim(pathinfo($file, PATHINFO_FILENAME))] = (int) filemtime($path);
+    }
+    return $versions;
+}
+
 // ─── Vieši JSON (db.json / tracks.json pavidalas kaip anksčiau) ──────
+// Only fields are added here; installed older clients read the rest as is.
+// noteVersions and versions are kept out of the admin backup.
 
 function build_public_db(PDO $db): array
 {
     $rows = $db->query('SELECT * FROM songs ORDER BY CAST(song_id AS UNSIGNED), song_id')->fetchAll();
-    return array_map(fn ($row) => song_to_api($row), $rows);
+    return array_map(function ($row) {
+        $song = song_to_api($row);
+        $song['noteVersions'] = note_versions_for_song((string) $row['song_id'], $song['notePages']);
+        return $song;
+    }, $rows);
 }
 
 function build_public_tracks(PDO $db): array
 {
-    return array_map(fn ($row) => track_to_api($db, $row), fetch_track_types($db));
+    return array_map(function ($row) use ($db) {
+        $track = track_to_api($db, $row);
+        $track['versions'] = (object) array_intersect_key(
+            audio_file_versions($track['name']),
+            array_flip($track['tracks']),
+        );
+        return $track;
+    }, fetch_track_types($db));
+}
+
+// Changes whenever db.json or tracks.json would, including when a media file
+// is replaced, so clients can poll this instead of downloading both.
+function public_data_version(array $songs, array $tracks): string
+{
+    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    return sha1(json_encode($songs, $flags) . "\n" . json_encode($tracks, $flags));
 }
 
 /**

@@ -39,6 +39,7 @@
 <script>
 import List from '../components/List.vue';
 import SearchBox from '../components/SearchBox.vue';
+import { DATA_UPDATED_EVENT } from '../lib/dataSync';
 import { debounce } from '../lib/debounce.js';
 import { compareSongIds } from '../lib/songNumber';
 import { createSongSearchResults } from '../lib/songSearch.js';
@@ -105,6 +106,10 @@ export default {
             this.activeQuery = query;
         }, 150);
         this.load();
+        window.addEventListener(DATA_UPDATED_EVENT, this.load);
+    },
+    unmounted() {
+        window.removeEventListener(DATA_UPDATED_EVENT, this.load);
     },
     activated() {
         // Keep keyboard-focused rows clear of the sticky search box

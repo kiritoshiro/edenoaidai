@@ -403,6 +403,65 @@ try {
         $leftovers = array_filter(array_merge(notes_folder('svg'), notes_folder('avif')), fn ($name) => str_starts_with($name, '.'));
         check($leftovers === [], 'import: no temporary files left behind');
     }
+
+    // ─── Public data version (what installed apps poll) ──────────────
+    if (!in_array('sqlite', PDO::getAvailableDrivers(), true)) {
+        skip('data version', 'needs pdo_sqlite');
+    } else {
+        $db = new PDO('sqlite::memory:', null, null, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+        $db->exec('CREATE TABLE songs (song_id TEXT, title TEXT, verse TEXT, body TEXT, slides_json TEXT, copyright TEXT)');
+        $db->exec('CREATE TABLE track_types (name TEXT, label TEXT, icon TEXT, sort_order INTEGER)');
+        $db->exec('CREATE TABLE song_tracks (song_id TEXT, type_name TEXT)');
+        $db->exec("INSERT INTO songs VALUES ('901', 'Pirma', '', 'a', NULL, ''), ('902', 'Antra', '', 'b', NULL, '')");
+        $db->exec("INSERT INTO track_types VALUES ('choras', 'Choras', NULL, 1)");
+        $db->exec("INSERT INTO song_tracks VALUES ('901', 'choras')");
+
+        @mkdir("$files/notes/svg", 0777, true);
+        @mkdir("$files/audio/choras", 0777, true);
+        foreach (["notes/svg/901.svg" => 1000000, "notes/svg/901_1.svg" => 1000001,
+            "audio/choras/901.mp3" => 2000000, "audio/choras/902.mp3" => 2000001,
+            "audio/choras/notes.txt" => 2000002] as $path => $time) {
+            file_put_contents("$files/$path", 'x');
+            touch("$files/$path", $time);
+        }
+        $version = function () use ($db): string {
+            foreach (FORMATS as $format) {
+                note_file_index($format, true);
+            }
+            clearstatcache();
+            return public_data_version(build_public_db($db), build_public_tracks($db));
+        };
+
+        $before = $version();
+        $songs = build_public_db($db);
+        check(json_encode($songs[0]['noteVersions']) === '{"svg":{"0":1000000,"1":1000001},"avif":{}}',
+            'version: noteVersions has each listed page\'s mtime, pages as object keys');
+        check($songs[0]['notePages'] === ['svg' => [0, 1], 'avif' => []] && $songs[0]['pages'] === 2,
+            'version: notePages and pages keep their shape');
+        $tracks = build_public_tracks($db);
+        check(json_encode($tracks[0]['versions']) === '{"901":2000000}',
+            'version: a track type lists the mtimes of its assigned MP3s only');
+        check(array_keys($tracks[0]) === ['name', 'label', 'icon', 'tracks', 'versions'],
+            'version: tracks.json keeps its fields and adds versions');
+        $export = build_database_export($db);
+        check(!isset($export['songs'][0]['noteVersions']) && !isset($export['trackTypes'][0]['versions']),
+            'version: the admin backup format is unchanged');
+
+        check($version() === $before && strlen($before) === 40, 'version: stable while nothing changes');
+        touch("$files/notes/svg/901_1.svg", 1000100);
+        $afterNote = $version();
+        check($afterNote !== $before, 'version: changes when a sheet-music page is replaced');
+        touch("$files/audio/choras/901.mp3", 2000100);
+        $afterAudio = $version();
+        check($afterAudio !== $afterNote, 'version: changes when an MP3 is replaced');
+        touch("$files/audio/choras/902.mp3", 2000200);
+        check($version() === $afterAudio, 'version: an MP3 without a song assignment is ignored');
+        $db->exec("UPDATE songs SET body = 'c' WHERE song_id = '902'");
+        check($version() !== $afterAudio, 'version: changes when a song is edited');
+    }
 } finally {
     remove_tree($work);
 }

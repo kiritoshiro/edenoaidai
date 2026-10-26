@@ -40,8 +40,13 @@
 </template>
 
 <script>
-import { db, setTrackTypes } from '../db';
-import { config } from '../lib/config';
+import { db } from '../db';
+import {
+    downloadData,
+    fetchDataVersion,
+    saveData,
+    setDataVersion,
+} from '../lib/dataSync';
 import { setAppTheme } from '../lib/theme';
 
 const USER_SETTING_KEYS = [
@@ -94,28 +99,20 @@ export default {
                 }
 
                 this.message = 'Siunčiama giesmių duomenų bazė…';
-                const [songs, trackLists] = await Promise.all([
-                    this.fetchJson(config.dbUrl),
-                    this.fetchJson(config.tracksUrl).catch(() => []),
-                ]);
-
-                if (!Array.isArray(songs) || !songs.length) {
-                    throw new Error('Gauta tuščia arba netinkama duomenų bazė');
-                }
-
-                const tracks = Array.isArray(trackLists) ? trackLists : [];
+                // Requested first, so the stored version is never newer than
+                // the data; background checks then pick up later changes
+                const versionRequest = fetchDataVersion().catch(() => '');
+                const { songs, tracks } = await downloadData({
+                    requireTracks: false,
+                });
 
                 this.message = 'Įrašoma…';
-                await this.importSongs(songs, tracks);
-
-                setTrackTypes(
-                    tracks.map(({ name, label, icon }) => ({
-                        name,
-                        label: label || name,
-                        icon: icon || null,
-                    })),
-                );
-                localStorage.setItem('lastInstall', String(Date.now()));
+                this.total = songs.length;
+                this.current = 0;
+                await saveData(songs, tracks, current => {
+                    this.current = current;
+                });
+                setDataVersion(await versionRequest);
 
                 if (refresh) {
                     this.message = 'Tikrinama nauja programėlės versija…';
@@ -183,77 +180,6 @@ export default {
                 // offline or service workers are unavailable.
                 console.warn('Nepavyko patikrinti programėlės kodo:', error);
             }
-        },
-
-        async fetchJson(url) {
-            if (!url) {
-                throw new Error('Nenurodytas duomenų bazės adresas (VITE_DB_URL)');
-            }
-            const bust = url.includes('?') ? '&' : '?';
-            const response = await fetch(`${url}${bust}t=${Date.now()}`, {
-                cache: 'no-store',
-            });
-            if (!response.ok) {
-                throw new Error(`Nepavyko parsiųsti (${response.status})`);
-            }
-            return response.json();
-        },
-
-        async importSongs(songs, trackLists) {
-            this.total = songs.length;
-            this.current = 0;
-
-            const rows = songs.map(song => {
-                const {
-                    songId,
-                    title,
-                    verse,
-                    body,
-                    slides,
-                    copyright,
-                    pages,
-                    notePages,
-                } = song;
-                const lists = trackLists
-                    .filter(
-                        type =>
-                            Array.isArray(type.tracks) &&
-                            type.tracks.includes(songId),
-                    )
-                    .map(type => type.name);
-
-                return {
-                    songId,
-                    title,
-                    verse,
-                    body,
-                    slides: Array.isArray(slides) ? slides : [],
-                    copyright,
-                    pages: pages || null,
-                    notePages: notePages || null,
-                    favorited: 0,
-                    lists,
-                };
-            });
-
-            // Keep the user's favourites across refreshes
-            const favorites = new Set(
-                (await db.songs.where('favorited').equals(1).toArray()).map(
-                    song => song.songId,
-                ),
-            );
-            rows.forEach(row => {
-                if (favorites.has(row.songId)) row.favorited = 1;
-            });
-
-            await db.transaction('rw', db.songs, async () => {
-                await db.songs.clear();
-                const CHUNK = 100;
-                for (let i = 0; i < rows.length; i += CHUNK) {
-                    await db.songs.bulkAdd(rows.slice(i, i + CHUNK));
-                    this.current = Math.min(i + CHUNK, rows.length);
-                }
-            });
         },
 
         success(refresh = false) {
