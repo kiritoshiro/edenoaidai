@@ -46,6 +46,7 @@ import {
     fetchDataVersion,
     saveData,
     setDataVersion,
+    waitForDataUpdate,
 } from '../lib/dataSync';
 import { setAppTheme } from '../lib/theme';
 
@@ -99,20 +100,26 @@ export default {
                 }
 
                 this.message = 'Siunčiama giesmių duomenų bazė…';
-                // Requested first, so the stored version is never newer than
-                // the data; background checks then pick up later changes
-                const versionRequest = fetchDataVersion().catch(() => '');
-                const { songs, tracks } = await downloadData({
+                await waitForDataUpdate();
+                // Read before the data, so the stored version is never newer
+                // than it; background checks then pick up later changes
+                const version = await fetchDataVersion().catch(() => '');
+                const { songs, tracks, tracksLoaded } = await downloadData({
                     requireTracks: false,
                 });
 
                 this.message = 'Įrašoma…';
                 this.total = songs.length;
                 this.current = 0;
+                // Unset while saving: if it fails part-way, the next check
+                // must not take the half-written data for current
+                setDataVersion('');
                 await saveData(songs, tracks, current => {
                     this.current = current;
                 });
-                setDataVersion(await versionRequest);
+                // Without the recordings, leave the version unset so the
+                // next background check fetches them
+                setDataVersion(tracksLoaded ? version : '');
 
                 if (refresh) {
                     this.message = 'Tikrinama nauja programėlės versija…';

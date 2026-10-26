@@ -35,25 +35,33 @@ export async function fetchDataVersion() {
 
 // The first install still works without tracks.json; a background update
 // keeps the stored recordings instead of wiping them on a failed request.
+// tracksLoaded is false when the install went on without recordings.
 export async function downloadData({ requireTracks = true } = {}) {
     const [songs, trackLists] = await Promise.all([
         fetchJson(config.dbUrl),
         requireTracks
             ? fetchJson(config.tracksUrl)
-            : fetchJson(config.tracksUrl).catch(() => []),
+            : fetchJson(config.tracksUrl).catch(() => null),
     ]);
 
     if (!Array.isArray(songs) || !songs.length) {
         throw new Error('Gauta tuščia arba netinkama duomenų bazė');
     }
-    if (requireTracks && !Array.isArray(trackLists)) {
+    const tracksLoaded = Array.isArray(trackLists);
+    if (requireTracks && !tracksLoaded) {
         throw new Error('Gautas netinkamas įrašų sąrašas');
     }
-    return { songs, tracks: Array.isArray(trackLists) ? trackLists : [] };
+    return { songs, tracks: tracksLoaded ? trackLists : [], tracksLoaded };
+}
+
+// Replaces the songs, then the recording types and the install time.
+export async function saveData(songs, tracks, onProgress) {
+    await replaceSongs(songs, tracks, onProgress);
+    saveTrackTypes(tracks);
 }
 
 // Replaces every song row in one transaction, keeping the user's favourites.
-export async function saveData(songs, tracks, onProgress = () => {}) {
+async function replaceSongs(songs, tracks, onProgress = () => {}) {
     await db.transaction('rw', db.songs, async () => {
         const favorites = new Set(
             (await db.songs.where('favorited').equals(1).toArray()).map(
@@ -69,7 +77,9 @@ export async function saveData(songs, tracks, onProgress = () => {}) {
             onProgress(Math.min(i + CHUNK, rows.length), rows.length);
         }
     });
+}
 
+function saveTrackTypes(tracks) {
     setTrackTypes(buildTrackTypes(tracks));
     localStorage.setItem('lastInstall', String(Date.now()));
 }
@@ -80,6 +90,12 @@ export function setDataVersion(version) {
     } else {
         localStorage.removeItem(DATA_VERSION_KEY);
     }
+}
+
+// The install page waits for a background import already under way, so
+// that import can't finish later and overwrite what the install saved.
+export function waitForDataUpdate() {
+    return running || Promise.resolve(false);
 }
 
 // Asks the server whether songs or media files changed and, if so, imports
@@ -115,8 +131,15 @@ async function updateData() {
     if (version === localStorage.getItem(DATA_VERSION_KEY)) return false;
 
     const { songs, tracks } = await downloadData();
-    await saveData(songs, tracks);
-    setDataVersion(version);
-    window.dispatchEvent(new CustomEvent(DATA_UPDATED_EVENT));
+    await replaceSongs(songs, tracks);
+    try {
+        saveTrackTypes(tracks);
+        setDataVersion(version);
+    } finally {
+        // The rows (and their ids) are replaced even if storing the rest
+        // failed, so open views reload. Without the new version stored,
+        // the next check imports again.
+        window.dispatchEvent(new CustomEvent(DATA_UPDATED_EVENT));
+    }
     return true;
 }
