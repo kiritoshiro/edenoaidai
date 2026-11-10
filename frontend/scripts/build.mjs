@@ -101,13 +101,15 @@ await build({
     build: {
         emptyOutDir: false,
         outDir: distDir,
-        minify: 'esbuild',
-        rollupOptions: {
+        // Vite 8 minifies with Oxc; esbuild is no longer installed.
+        minify: 'oxc',
+        rolldownOptions: {
             input: serviceWorkerEntry,
             output: {
                 entryFileNames: 'sw.js',
                 format: 'iife',
-                inlineDynamicImports: true,
+                // One self-contained file: a service worker can't load chunks.
+                codeSplitting: false,
             },
         },
     },
