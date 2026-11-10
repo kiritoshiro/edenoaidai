@@ -1,9 +1,9 @@
 {
-  "sha": "ead16684bcf9b1000d9202e0230d9341119dcfab",
-  "shortSha": "ead1668",
+  "sha": "38d5193fac5c3490d1c4ab757535c06e0bd99be8",
+  "shortSha": "38d5193",
   "branch": "fix/offline-audio-range",
-  "message": "Fix Codex review findings in the offline audio download",
-  "date": "2026-11-10T18:18:28+02:00",
+  "message": "Store the audio file again if its cache vanished mid-download",
+  "date": "2026-11-10T18:24:38+02:00",
   "dirty": true,
-  "builtAt": "2026-11-10T16:24:03.376Z"
+  "builtAt": "2026-11-10T16:28:23.596Z"
 }

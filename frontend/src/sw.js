@@ -67,6 +67,11 @@ const otherCachedVersion = cacheName => ({
 // Must come after RangeRequestsPlugin and ExpirationPlugin, so the ranges
 // (and 416s) built here are not sliced again.
 const AUDIO_CACHE = 'audio-v1';
+const audioExpiration = new ExpirationPlugin({
+    maxEntries: 80,
+    maxAgeSeconds: 90 * 24 * 60 * 60,
+    purgeOnQuotaError: true,
+});
 const audioDownloads = new Map(); // url -> Promise<progressive download | null>
 const fullAudioDownloadPlugin = {
     cachedResponseWillBeUsed: async ({ request, cachedResponse, state }) => {
@@ -113,8 +118,16 @@ const fullAudioDownloadPlugin = {
             const cache = await caches.open(AUDIO_CACHE);
             if (download && !(await cache.match(request.url))) {
                 const whole = await download.whole();
-                if (whole) await cache.put(request.url, whole);
+                if (whole) {
+                    await cache.put(request.url, whole);
+                    // Register it for expiry, as Workbox's own put would have.
+                    await audioExpiration.cacheDidUpdate({ cacheName: AUDIO_CACHE, request });
+                }
             }
+        } catch (error) {
+            // Storage still full: playback worked, the file just isn't
+            // offline. Throwing here would leave Workbox's event unfinished.
+            console.warn('Could not store audio for offline use', error);
         } finally {
             if (audioDownloads.get(request.url) === state.download) {
                 audioDownloads.delete(request.url);
@@ -134,11 +147,7 @@ registerRoute(
             otherCachedVersion(AUDIO_CACHE),
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new RangeRequestsPlugin(),
-            new ExpirationPlugin({
-                maxEntries: 80,
-                maxAgeSeconds: 90 * 24 * 60 * 60,
-                purgeOnQuotaError: true,
-            }),
+            audioExpiration,
             fullAudioDownloadPlugin,
         ],
     }),
