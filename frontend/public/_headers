@@ -5,6 +5,8 @@
 # The service worker and app shell must always be revalidated
 /sw.js
   Cache-Control: no-cache
+/service-worker.js
+  Cache-Control: no-cache
 /index.html
   Cache-Control: no-cache
 /manifest.json

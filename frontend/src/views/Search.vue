@@ -55,6 +55,7 @@
 <script>
 import List from '../components/List.vue';
 import SearchBox from '../components/SearchBox.vue';
+import { DATA_UPDATED_EVENT } from '../lib/dataSync';
 import { debounce } from '../lib/debounce.js';
 import { createSongSearchResults } from '../lib/songSearch.js';
 
@@ -136,6 +137,10 @@ export default {
     created() {
         this.updateSearchUri = debounce(this.replaceSearchUri, 300);
         this.searchSongs();
+        window.addEventListener(DATA_UPDATED_EVENT, this.searchSongs);
+    },
+    unmounted() {
+        window.removeEventListener(DATA_UPDATED_EVENT, this.searchSongs);
     },
     activated() {
         // A pending update cancelled on the way out leaves the box ahead

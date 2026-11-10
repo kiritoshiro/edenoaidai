@@ -59,7 +59,7 @@
                             <input
                                 type="file"
                                 multiple
-                                :accept="group.kind === 'audio' ? '.mp3' : `.${bucket.name}`"
+                                :accept="group.kind === 'audio' ? '.mp3' : noteUploadAccept(bucket.name)"
                                 :disabled="mediaBusy"
                                 @change="uploadFiles(group.kind, bucket.name, $event)"
                             />
@@ -158,20 +158,12 @@
 
 <script>
 import { api } from '../../lib/api';
+import { noteUploadAccept, parseNotesFilename } from '../../lib/noteFormats';
 
 function parseAudioFilename(filename) {
     if (!/\.mp3$/iu.test(filename)) return null;
     const songId = filename.replace(/\.mp3$/iu, '');
     return songId || null;
-}
-
-function parseNotesFilename(filename, format) {
-    const pattern = new RegExp(`\\.${format}$`, 'iu');
-    if (!pattern.test(filename)) return null;
-    const stem = filename.replace(pattern, '');
-    const match = stem.match(/^(.+?)(?:_([1-8]))?$/u);
-    if (!match) return null;
-    return { songId: match[1], page: match[2] ? Number(match[2]) : 0 };
 }
 
 export default {
@@ -205,6 +197,7 @@ export default {
         this.loadMediaOptions();
     },
     methods: {
+        noteUploadAccept,
         pick(event) {
             return (event.target.files && event.target.files[0]) || null;
         },
@@ -346,7 +339,9 @@ export default {
                     } else {
                         const parsed = parseNotesFilename(file.name, bucket);
                         if (!parsed) {
-                            throw new Error(`Netinkamas failo vardas (turi būti <giesmės numeris>.${bucket})`);
+                            throw new Error(
+                                `Netinkamas failo vardas (turi būti <giesmės numeris> su plėtiniu ${noteUploadAccept(bucket).replaceAll(',', ', ')})`,
+                            );
                         }
                         await api.uploadNotes(bucket, parsed.songId, parsed.page, file);
                     }
@@ -399,7 +394,15 @@ export default {
             try {
                 const result = await api.importMedia(this.restoreKind, values, this.mediaFile);
                 const skipped = result.skipped ? `, praleista ${result.skipped}` : '';
-                this.flashMedia(`Įkelta ${result.imported} failų${skipped}.`);
+                const legacy = result.legacyJpg
+                    ? ` Archyve yra ${result.legacyJpg} senų JPG natų failų: jie neįkelti. ` +
+                      'AVIF natos daromos iš SVG įrankiu scripts/notes-avif arba įkeliamos po vieną.'
+                    : '';
+                const message = `Įkelta ${result.imported} failų${skipped}.${legacy}`;
+                // The legacy notice stays until the next action instead of
+                // disappearing after 3 seconds.
+                if (legacy) this.mediaMessage = message;
+                else this.flashMedia(message);
                 this.mediaFile = null;
                 if (this.$refs.mediaFileInput) this.$refs.mediaFileInput.value = '';
                 await this.loadMediaOptions();

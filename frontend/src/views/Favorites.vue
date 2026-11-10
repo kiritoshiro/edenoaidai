@@ -20,6 +20,7 @@
 
 <script>
 import List from '../components/List.vue';
+import { DATA_UPDATED_EVENT } from '../lib/dataSync';
 
 export default {
     name: 'Favorites',
@@ -33,6 +34,10 @@ export default {
     },
     created() {
         this.load();
+        window.addEventListener(DATA_UPDATED_EVENT, this.load);
+    },
+    unmounted() {
+        window.removeEventListener(DATA_UPDATED_EVENT, this.load);
     },
     activated() {
         // Favourites can change while this view is kept alive

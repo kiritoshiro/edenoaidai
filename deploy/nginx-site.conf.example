@@ -51,8 +51,18 @@ server {
     }
 
     # Uploaded audio, icons, and sheet music must exist as real files.
+    # Sheet-music pages are AVIF: nginx's mime.types must contain
+    # "image/avif avif;" (older releases lack it).
     # The CSP sandbox stops a malicious uploaded SVG from running scripts with
     # this site's origin when opened directly; <img> display is unaffected.
+    # Only after files/notes/jpg/ is deleted (see README, "Removing the old JPG
+    # pages"): send old app versions that still ask for JPG pages to the AVIF
+    # pages. The longer prefix wins over /files/ below.
+    # location ^~ /files/notes/jpg/ {
+    #     rewrite ^/files/notes/jpg/(.+)\.jpe?g$ /files/notes/avif/$1.avif permanent;
+    #     return 404;
+    # }
+
     location ^~ /files/ {
         try_files $uri =404;
         expires 7d;
@@ -60,8 +70,11 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
     }
 
-    # Always revalidate the application shell and service worker.
-    location ~* ^/(index\.html|sw\.js|manifest\.json|version\.json)$ {
+    # Always revalidate the application shell and service workers.
+    # service-worker.js is the kill switch for pre-July-2026 installs: it must
+    # be served as JavaScript (never the index.html fallback) and must not be
+    # cached, or the old app's update check keeps failing.
+    location ~* ^/(index\.html|sw\.js|service-worker\.js|manifest\.json|version\.json)$ {
         try_files $uri =404;
         expires -1;
         add_header Cache-Control "no-cache";

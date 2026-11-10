@@ -55,9 +55,26 @@ for (const asset of assetReferences) {
   }
 }
 
-if (missingSections.length > 0 || assetReferenceFailures.length > 0) {
+// Pre-July-2026 installs only migrate if /service-worker.js is a real
+// JavaScript file (the kill switch). Without it the SPA fallback answers with
+// index.html, the browser's update check fails, and the old app stays forever.
+const killSwitchFailures = [];
+try {
+  const [source, deployed] = await Promise.all([
+    readFile('frontend/public/service-worker.js', 'utf8'),
+    readFile('server/service-worker.js', 'utf8'),
+  ]);
+  if (source !== deployed) {
+    killSwitchFailures.push('server/service-worker.js differs from frontend/public/service-worker.js (run the release build)');
+  }
+} catch (error) {
+  killSwitchFailures.push(`service-worker.js kill switch is missing: ${error.message}`);
+}
+
+const failures = [...missingSections, ...assetReferenceFailures, ...killSwitchFailures];
+if (failures.length > 0) {
   console.error('Integrity check failed:');
-  for (const failure of [...missingSections, ...assetReferenceFailures]) console.error(`- ${failure}`);
+  for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 

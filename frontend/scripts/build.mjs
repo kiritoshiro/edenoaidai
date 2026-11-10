@@ -27,6 +27,9 @@ async function walk(directory) {
 }
 
 function shouldPrecache(filePath) {
+    // The kill switch for the old v1 worker is never part of the app shell.
+    if (path.basename(filePath) === 'service-worker.js') return false;
+
     return (
         path.basename(filePath) === 'manifest.json' ||
         precacheExtensions.has(path.extname(filePath).toLowerCase())

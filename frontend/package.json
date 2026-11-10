@@ -6,7 +6,7 @@
     "scripts": {
         "dev": "vite",
         "build": "node scripts/build.mjs",
-        "test": "node --test src/lib/*.test.js",
+        "test": "node --test src/lib/*.test.js ../scripts/notes-avif/*.test.mjs",
         "preview": "vite preview",
         "release": "node scripts/build.mjs && node scripts/sync-to-server.mjs"
     },
@@ -18,7 +18,7 @@
     "devDependencies": {
         "@vitejs/plugin-vue": "^6.0.0",
         "sass-embedded": "^1.85.0",
-        "vite": "^7.0.0",
+        "vite": "^7.3.7",
         "workbox-cacheable-response": "^7.3.0",
         "workbox-core": "^7.3.0",
         "workbox-expiration": "^7.3.0",

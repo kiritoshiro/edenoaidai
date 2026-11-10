@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
-const MEDIA_ARCHIVE_MAX_ENTRIES = 100000;
+// Limits for one media archive import. The live library holds a few hundred
+// files per category and format; the byte budget is in media_import_budget().
+const MEDIA_ARCHIVE_MAX_ENTRIES = 5000;
+const MEDIA_ARCHIVE_MAX_TOTAL_BYTES = 4 * 1024 * 1024 * 1024;
+const MEDIA_ARCHIVE_MAX_EXPANSION = 20;
+const MEDIA_IMPORT_FREE_SPACE_RESERVE = 256 * 1024 * 1024;
 
 /**
  * Return the media choices shown in the administrator's backup screen.
@@ -58,8 +63,9 @@ function media_options(PDO $db): array
 function media_format_label(string $format): string
 {
     return match ($format) {
-        'svg' => 'SVG (vektorinės natos)',
-        'jpg' => 'JPG (paveikslėlių natos)',
+        // Visitors see the formats as #1 and #2; admins see both names.
+        'svg' => '#1 · SVG (vektorinės natos)',
+        'avif' => '#2 · AVIF (paveikslėlių natos)',
         default => strtoupper($format),
     };
 }
@@ -365,13 +371,16 @@ function media_archive_song_id(string $filename, string $format): array
     return [$songId, $page];
 }
 
-function media_write_zip_entry(ZipArchive $zip, int $index, string $target, int $maxBytes): int
+/**
+ * Extract one archive entry to a temporary file next to $target. Bytes are
+ * counted as they are written, because the sizes a ZIP declares can be forged:
+ * the entry stops at $maxBytes, and the whole import at its $budget.
+ *
+ * @return string the temporary file
+ */
+function media_extract_zip_entry(ZipArchive $zip, int $index, string $target, int $maxBytes, int &$budget): string
 {
-    $stat = $zip->statIndex($index);
-    if (is_array($stat) && isset($stat['size']) && (int) $stat['size'] > $maxBytes) {
-        throw new InvalidArgumentException('Archyve esantis failas per didelis');
-    }
-    $stream = $zip->getStream($zip->getNameIndex($index));
+    $stream = $zip->getStream((string) $zip->getNameIndex($index));
     if ($stream === false) {
         throw new RuntimeException('Nepavyko perskaityti archyvo failo');
     }
@@ -381,27 +390,180 @@ function media_write_zip_entry(ZipArchive $zip, int $index, string $target, int 
         throw new RuntimeException('Nepavyko sukurti media aplanko');
     }
     $temporary = tempnam($dir, '.media-upload-');
-    if ($temporary === false) {
-        fclose($stream);
-        throw new RuntimeException('Nepavyko sukurti laikino media failo');
-    }
-    $output = fopen($temporary, 'wb');
+    $output = $temporary === false ? false : fopen($temporary, 'wb');
     if ($output === false) {
         fclose($stream);
-        @unlink($temporary);
-        throw new RuntimeException('Nepavyko įrašyti media failo');
+        if ($temporary !== false) {
+            @unlink($temporary);
+        }
+        throw new RuntimeException('Nepavyko sukurti laikino media failo');
     }
-    $bytes = stream_copy_to_stream($stream, $output);
+
+    $bytes = 0;
+    try {
+        while (!feof($stream)) {
+            $chunk = fread($stream, 1024 * 1024);
+            if ($chunk === false) {
+                throw new RuntimeException('Nepavyko perskaityti archyvo failo');
+            }
+            if ($chunk === '') {
+                break;
+            }
+            $bytes += strlen($chunk);
+            if ($bytes > $maxBytes) {
+                throw new InvalidArgumentException('Archyve esantis failas per didelis');
+            }
+            if ($bytes > $budget) {
+                throw new InvalidArgumentException('Išskleistas archyvas būtų per didelis');
+            }
+            if (fwrite($output, $chunk) !== strlen($chunk)) {
+                throw new RuntimeException('Nepavyko įrašyti media failo');
+            }
+        }
+        $stat = $zip->statIndex($index);
+        if (is_array($stat) && isset($stat['crc'])
+            && hash_file('crc32b', $temporary) !== sprintf('%08x', $stat['crc'])) {
+            throw new InvalidArgumentException('Archyve yra sugadintas failas');
+        }
+    } catch (Throwable $e) {
+        fclose($stream);
+        fclose($output);
+        @unlink($temporary);
+        throw $e;
+    }
     fclose($stream);
     fclose($output);
-    if ($bytes === false || $bytes > $maxBytes || !rename($temporary, $target)) {
-        @unlink($temporary);
-        throw new RuntimeException('Nepavyko išsaugoti media failo');
-    }
-    return (int) $bytes;
+    $budget -= $bytes;
+    return $temporary;
 }
 
-function media_import_archive(array $file, string $kind, array $selected): array
+/**
+ * How many bytes one import may unpack. MP3, AVIF and SVG pages compress
+ * little or moderately, so a genuine archive unpacks to a small multiple of
+ * its own size; a ZIP bomb does not.
+ */
+function media_import_budget(int $archiveBytes): int
+{
+    return (int) min(
+        MEDIA_ARCHIVE_MAX_TOTAL_BYTES,
+        max(64 * 1024 * 1024, $archiveBytes * MEDIA_ARCHIVE_MAX_EXPANSION),
+    );
+}
+
+/**
+ * Take the media import lock: one archive installs (or rolls back) at a
+ * time, so a failing import can never restore its backups over a file that
+ * a concurrent import has just installed. Waits up to $waitSeconds.
+ *
+ * @return resource
+ */
+function media_import_lock(float $waitSeconds)
+{
+    $dir = storage_dir();
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        throw new RuntimeException('Nepavyko sukurti storage aplanko');
+    }
+    $handle = fopen($dir . '/media-import.lock', 'c');
+    if ($handle === false) {
+        throw new RuntimeException('Nepavyko atidaryti media importo užrakto');
+    }
+    $deadline = microtime(true) + $waitSeconds;
+    while (!flock($handle, LOCK_EX | LOCK_NB)) {
+        if (microtime(true) >= $deadline) {
+            fclose($handle);
+            throw new RuntimeException('Kitas media archyvo importas dar vyksta; pabandykite vėliau');
+        }
+        usleep(200000);
+    }
+    return $handle;
+}
+
+/** @param resource $handle */
+function media_import_unlock($handle): void
+{
+    flock($handle, LOCK_UN);
+    fclose($handle);
+}
+
+/**
+ * Move unpacked files into place all-or-nothing. Each existing target is
+ * moved aside first; if any step fails, every target is put back as it was
+ * (replaced files restored, new files removed) before the error is passed on.
+ * Anything rollback cannot undo is kept and named in the error. Call it while
+ * holding media_import_lock().
+ *
+ * @param array<string, string> $temporaries temporary file => target
+ * @param array{rename?: callable(string, string): bool, unlink?: callable(string): bool} $operations
+ *        file operations; tests inject failures
+ * @return list<string> backups left behind after a successful install
+ */
+function media_install_files(array $temporaries, array $operations = []): array
+{
+    $rename = $operations['rename'] ?? 'rename';
+    $unlink = $operations['unlink'] ?? 'unlink';
+    $journal = [];
+    try {
+        foreach ($temporaries as $temporary => $target) {
+            $backup = null;
+            if (file_exists($target)) {
+                $backup = tempnam(dirname($target), '.media-backup-');
+                if ($backup === false || !@$rename($target, $backup)) {
+                    if ($backup !== false) {
+                        @unlink($backup);
+                    }
+                    throw new RuntimeException('Nepavyko išsaugoti media failo');
+                }
+            }
+            $journal[] = [$target, $backup];
+            if (!@$rename($temporary, $target)) {
+                throw new RuntimeException('Nepavyko išsaugoti media failo');
+            }
+        }
+    } catch (Throwable $e) {
+        $notRestored = [];
+        $notRemoved = [];
+        foreach (array_reverse($journal) as [$target, $backup]) {
+            if ($backup === null) {
+                // A new target that was never installed is not there to remove.
+                if (file_exists($target) && !@$unlink($target)) {
+                    $notRemoved[] = $target;
+                }
+            } elseif (!@$rename($backup, $target)) {
+                $notRestored[] = $backup;
+            }
+        }
+        if ($notRestored !== [] || $notRemoved !== []) {
+            $problems = [];
+            if ($notRestored !== []) {
+                $problems[] = 'ankstesnių failų nepavyko atkurti, jų kopijos liko: ' . implode(', ', $notRestored);
+            }
+            if ($notRemoved !== []) {
+                $problems[] = 'naujai įkeltų failų nepavyko pašalinti: ' . implode(', ', $notRemoved);
+            }
+            throw new RuntimeException(
+                'Nepavyko išsaugoti media failų, o atšaukimas nepavyko iki galo; ' . implode('; ', $problems),
+                0,
+                $e,
+            );
+        }
+        throw $e;
+    }
+    $leftovers = [];
+    foreach ($journal as [, $backup]) {
+        if ($backup !== null && !@$unlink($backup)) {
+            $leftovers[] = $backup;
+            error_log('[edeno-aidai] Media import: could not delete backup ' . $backup);
+        }
+    }
+    return $leftovers;
+}
+
+/**
+ * @param array{rename?: callable, unlink?: callable, lockWait?: float} $options
+ *        test seams: file operations for media_install_files() and how long
+ *        to wait for the import lock (default 60 s)
+ */
+function media_import_archive(array $file, string $kind, array $selected, array $options = []): array
 {
     if (!class_exists('ZipArchive')) {
         throw new RuntimeException('Archyvams serveryje reikalingas PHP zip plėtinys');
@@ -419,6 +581,11 @@ function media_import_archive(array $file, string $kind, array $selected): array
     $entries = [];
     $targets = [];
     $skipped = 0;
+    $legacyJpg = 0;
+    $declaredBytes = 0;
+    $temporaries = [];
+    $warnings = [];
+    $budget = media_import_budget((int) @filesize((string) $file['tmp_name']));
     try {
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $name = $zip->getNameIndex($index);
@@ -445,6 +612,13 @@ function media_import_archive(array $file, string $kind, array $selected): array
 
             [$root, $bucket, $filename] = $parts;
             if ($root !== $kind || !in_array($bucket, $selected, true)) {
+                // Archives made before the AVIF switch hold notes/jpg pages.
+                // Converting hundreds of pages would outlast the request, so
+                // they are only counted; AVIF pages are made from the SVGs
+                // with scripts/notes-avif/ and imported as an avif archive.
+                if ($kind === 'notes' && $root === 'notes' && $bucket === 'jpg') {
+                    $legacyJpg++;
+                }
                 $skipped++;
                 continue;
             }
@@ -467,30 +641,62 @@ function media_import_archive(array $file, string $kind, array $selected): array
                 $target = files_dir() . '/notes/' . $bucket . '/'
                     . notes_file_name($songId, $page, $bucket);
                 $maxBytes = 15 * 1024 * 1024;
-                // Checked here, before anything is written, so one bad SVG
-                // rejects the whole archive instead of half-importing it.
-                // Oversized entries are left to media_write_zip_entry(), which
-                // rejects them with the right message.
-                $stat = $zip->statIndex($index);
-                if ($bucket === 'svg' && (int) ($stat['size'] ?? 0) <= $maxBytes) {
-                    $svg = $zip->getFromIndex($index);
-                    if ($svg === false || !svg_is_safe($svg)) {
-                        throw new InvalidArgumentException(
-                            'Archyvo SVG faile ' . $filename . ' yra skriptų ar kito aktyvaus turinio',
-                        );
-                    }
-                }
             }
             if (isset($targets[$target])) {
                 throw new InvalidArgumentException('Archyve kartojasi tas pats media failas');
             }
             $targets[$target] = true;
-            $entries[] = [$index, $target, $maxBytes];
+
+            // The declared sizes reject an honest oversized archive before
+            // anything is written; extraction counts the real bytes again.
+            $stat = $zip->statIndex($index);
+            $size = (int) ($stat['size'] ?? 0);
+            if ($size > $maxBytes) {
+                throw new InvalidArgumentException('Archyve esantis failas per didelis: ' . $filename);
+            }
+            $declaredBytes += $size;
+            $entries[] = [$index, $target, $maxBytes, $kind === 'notes' ? $bucket : '', $filename];
         }
-        foreach ($entries as [$index, $target, $maxBytes]) {
-            media_write_zip_entry($zip, $index, $target, $maxBytes);
+        if ($declaredBytes > $budget) {
+            throw new InvalidArgumentException('Išskleistas archyvas būtų per didelis');
         }
+        $free = @disk_free_space(files_dir());
+        if ($free !== false && $declaredBytes + MEDIA_IMPORT_FREE_SPACE_RESERVE > $free) {
+            throw new RuntimeException('Serveryje neužtenka vietos šiam archyvui');
+        }
+
+        // Everything is unpacked and checked before any file is replaced, so
+        // one bad entry rejects the whole archive.
+        foreach ($entries as [$index, $target, $maxBytes, $format, $filename]) {
+            set_time_limit(120);
+            $temporary = media_extract_zip_entry($zip, $index, $target, $maxBytes, $budget);
+            $temporaries[$temporary] = $target;
+            if ($format === 'svg' && !svg_is_safe((string) file_get_contents($temporary))) {
+                throw new InvalidArgumentException(
+                    'Archyvo SVG faile ' . $filename . ' yra skriptų ar kito aktyvaus turinio',
+                );
+            }
+            if ($format === 'avif') {
+                try {
+                    assert_avif_page($temporary);
+                } catch (InvalidArgumentException $e) {
+                    throw new InvalidArgumentException(
+                        'Archyvo failas ' . $filename . ': ' . $e->getMessage(),
+                    );
+                }
+            }
+        }
+        $lock = media_import_lock((float) ($options['lockWait'] ?? 60));
+        try {
+            $warnings = media_install_files($temporaries, $options);
+        } finally {
+            media_import_unlock($lock);
+        }
+        $temporaries = [];
     } finally {
+        foreach (array_keys($temporaries) as $temporary) {
+            @unlink($temporary);
+        }
         $zip->close();
     }
 
@@ -500,5 +706,8 @@ function media_import_archive(array $file, string $kind, array $selected): array
         'selected' => $selected,
         'imported' => count($entries),
         'skipped' => $skipped,
+        'legacyJpg' => $legacyJpg,
+        // Backups that could not be deleted after a successful import.
+        'warnings' => $warnings,
     ];
 }
