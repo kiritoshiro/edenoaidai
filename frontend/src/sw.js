@@ -66,6 +66,7 @@ const otherCachedVersion = cacheName => ({
 // with Content-Encoding) the first range waits for the whole download.
 // Must come after RangeRequestsPlugin and ExpirationPlugin, so the ranges
 // (and 416s) built here are not sliced again.
+const AUDIO_CACHE = 'audio-v1';
 const audioDownloads = new Map(); // url -> Promise<progressive download | null>
 const fullAudioDownloadPlugin = {
     cachedResponseWillBeUsed: async ({ request, cachedResponse, state }) => {
@@ -104,18 +105,23 @@ const fullAudioDownloadPlugin = {
     handlerDidComplete: async ({ request, state }) => {
         if (!state.download) return;
         state.resolveDownload(null);
-        if (audioDownloads.get(request.url) === state.download) {
-            audioDownloads.delete(request.url);
+        try {
+            // If the cache was deleted while downloading ("Atnaujinti
+            // duomenis", a quota purge), Workbox's copy went with it, while
+            // later plays joined this download. Store the file again.
+            const download = await state.download;
+            const cache = await caches.open(AUDIO_CACHE);
+            if (download && !(await cache.match(request.url))) {
+                const whole = await download.whole();
+                if (whole) await cache.put(request.url, whole);
+            }
+        } finally {
+            if (audioDownloads.get(request.url) === state.download) {
+                audioDownloads.delete(request.url);
+            }
         }
     },
 };
-
-// The page deleted the runtime caches ("Atnaujinti duomenis"). Downloads
-// still running would store into the deleted cache, so the next play must
-// start its own instead of joining them.
-self.addEventListener('message', event => {
-    if (event.data?.type === 'runtime-caches-cleared') audioDownloads.clear();
-});
 
 // Audio (mp3) – cache-first so hymns work offline.
 // The "Atnaujinti duomenis" flow deletes this cache to force fresh files.
@@ -123,9 +129,9 @@ registerRoute(
     ({ url, request }) =>
         request.destination === 'audio' || url.pathname.endsWith('.mp3'),
     new CacheFirst({
-        cacheName: 'audio-v1',
+        cacheName: AUDIO_CACHE,
         plugins: [
-            otherCachedVersion('audio-v1'),
+            otherCachedVersion(AUDIO_CACHE),
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new RangeRequestsPlugin(),
             new ExpirationPlugin({

@@ -126,9 +126,6 @@ export default {
                         .filter(key => !key.includes('precache'))
                         .map(key => caches.delete(key)),
                 );
-                navigator.serviceWorker?.controller?.postMessage({
-                    type: 'runtime-caches-cleared',
-                });
             } catch (error) {
                 console.error('Nepavyko išvalyti podėlio:', error);
             }

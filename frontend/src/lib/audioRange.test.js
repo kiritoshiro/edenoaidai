@@ -99,6 +99,22 @@ test('returns 416 for a range past the end', () => {
     assert.equal(response.headers.get('Content-Range'), 'bytes */100');
 });
 
+test('gives the whole file once downloaded, or null after a failure', async () => {
+    const source = slowResponse(9);
+    const download = createProgressiveDownload(source.response);
+    source.pushAll();
+    const whole = await download.whole();
+    assert.equal(whole.status, 200);
+    assert.equal(whole.headers.get('Content-Length'), '100');
+    assert.deepEqual(await read(whole), bytes);
+
+    const broken = slowResponse(10);
+    const failed = createProgressiveDownload(broken.response);
+    broken.push();
+    broken.fail(new Error('offline'));
+    assert.equal(await failed.whole(), null);
+});
+
 test('fails waiting ranges when the download fails', async () => {
     const source = slowResponse(10);
     const download = createProgressiveDownload(source.response);

@@ -122,5 +122,16 @@ export function createProgressiveDownload(response) {
         });
     }
 
-    return { respond, finished };
+    // The whole file once the download has finished, or null if it failed.
+    async function whole() {
+        await finished;
+        if (failure || received !== size) return null;
+        return new Response(new Blob(chunks), {
+            status: 200,
+            statusText: 'OK',
+            headers: response.headers,
+        });
+    }
+
+    return { respond, finished, whole };
 }

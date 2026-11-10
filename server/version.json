@@ -1,9 +1,9 @@
 {
-  "sha": "461288ee1e554661370fc7f2a9c46becd12d48c6",
-  "shortSha": "461288e",
+  "sha": "ead16684bcf9b1000d9202e0230d9341119dcfab",
+  "shortSha": "ead1668",
   "branch": "fix/offline-audio-range",
-  "message": "Merge v2 into fix/offline-audio-range",
-  "date": "2026-11-10T18:02:40+02:00",
+  "message": "Fix Codex review findings in the offline audio download",
+  "date": "2026-11-10T18:18:28+02:00",
   "dirty": true,
-  "builtAt": "2026-11-10T16:17:23.901Z"
+  "builtAt": "2026-11-10T16:24:03.376Z"
 }
