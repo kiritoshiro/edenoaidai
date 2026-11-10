@@ -1,9 +1,9 @@
 {
-  "sha": "38d5193fac5c3490d1c4ab757535c06e0bd99be8",
-  "shortSha": "38d5193",
-  "branch": "fix/offline-audio-range",
-  "message": "Store the audio file again if its cache vanished mid-download",
-  "date": "2026-11-10T18:24:38+02:00",
-  "dirty": true,
-  "builtAt": "2026-11-10T16:28:23.596Z"
+  "sha": "95e9b6c814142a366d345a81f9653159fa4bbd0e",
+  "shortSha": "95e9b6c",
+  "branch": "build/rebuild-server-2026-11-10",
+  "message": "Merge pull request #11 from kiritoshiro/ci/codeql-action-v4",
+  "date": "2026-11-10T19:14:46+02:00",
+  "dirty": false,
+  "builtAt": "2026-11-10T17:33:01.447Z"
 }
