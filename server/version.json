@@ -1,9 +1,9 @@
 {
-  "sha": "95e9b6c814142a366d345a81f9653159fa4bbd0e",
-  "shortSha": "95e9b6c",
-  "branch": "build/rebuild-server-2026-11-10",
-  "message": "Merge pull request #11 from kiritoshiro/ci/codeql-action-v4",
-  "date": "2026-11-10T19:14:46+02:00",
+  "sha": "ef91adb8dc705ad9a23c857deef823def268971d",
+  "shortSha": "ef91adb",
+  "branch": "dependabot/npm_and_yarn/frontend/vue-router-5.4.0",
+  "message": "Merge remote-tracking branch 'origin/v2' into dependabot/npm_and_yarn/frontend/vue-router-5.4.0",
+  "date": "2026-11-10T19:40:23+02:00",
   "dirty": false,
-  "builtAt": "2026-11-10T17:33:01.447Z"
+  "builtAt": "2026-11-10T17:40:32.676Z"
 }
