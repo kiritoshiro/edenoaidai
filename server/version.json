@@ -1,9 +1,9 @@
 {
-  "sha": "ef91adb8dc705ad9a23c857deef823def268971d",
-  "shortSha": "ef91adb",
-  "branch": "dependabot/npm_and_yarn/frontend/vue-router-5.4.0",
-  "message": "Merge remote-tracking branch 'origin/v2' into dependabot/npm_and_yarn/frontend/vue-router-5.4.0",
-  "date": "2026-11-10T19:40:23+02:00",
-  "dirty": false,
-  "builtAt": "2026-11-10T17:40:32.676Z"
+  "sha": "b10886f0f1c509a2f5aa091153d8378996f8e908",
+  "shortSha": "b10886f",
+  "branch": "dependabot/npm_and_yarn/frontend/vite-8.3.5",
+  "message": "Bump vite from 7.3.7 to 8.3.5 in /frontend",
+  "date": "2026-11-10T17:44:23Z",
+  "dirty": true,
+  "builtAt": "2026-11-10T18:47:34.136Z"
 }

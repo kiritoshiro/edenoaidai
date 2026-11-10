@@ -54,8 +54,10 @@ export default {
     border-radius: 22px;
     background: var(--app-nav);
     box-shadow: var(--app-shadow);
-    backdrop-filter: blur(18px);
+    // Prefixed first: Lightning CSS (Vite 8) merges the pair and keeps the
+    // last one, so standard-last keeps Chrome's blur.
     -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
 
     .menu {
         display: grid;
