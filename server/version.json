@@ -1,9 +1,9 @@
 {
-  "sha": "a61df1698eddd86b7ad1d323111cdcd37165c1dc",
-  "shortSha": "a61df16",
+  "sha": "461288ee1e554661370fc7f2a9c46becd12d48c6",
+  "shortSha": "461288e",
   "branch": "fix/offline-audio-range",
-  "message": "Rebuild server/ for the offline audio fix",
-  "date": "2026-10-18T01:38:37+03:00",
+  "message": "Merge v2 into fix/offline-audio-range",
+  "date": "2026-11-10T18:02:40+02:00",
   "dirty": true,
-  "builtAt": "2026-11-10T16:00:34.493Z"
+  "builtAt": "2026-11-10T16:17:23.901Z"
 }

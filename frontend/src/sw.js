@@ -61,20 +61,29 @@ const otherCachedVersion = cacheName => ({
 // the network: Chrome stops playback when one media resource mixes
 // service-worker-built and network responses. Once the file is cached,
 // RangeRequestsPlugin slices it.
+// Same-origin only: a cross-origin file without CORS would be cached as an
+// opaque response that cannot be sliced later. Without Content-Length (or
+// with Content-Encoding) the first range waits for the whole download.
+// Must come after RangeRequestsPlugin and ExpirationPlugin, so the ranges
+// (and 416s) built here are not sliced again.
 const audioDownloads = new Map(); // url -> Promise<progressive download | null>
 const fullAudioDownloadPlugin = {
-    cachedResponseWillBeUsed: async ({ request, cachedResponse }) => {
+    cachedResponseWillBeUsed: async ({ request, cachedResponse, state }) => {
         const range = request.headers.get('range');
-        if (cachedResponse || !range || !audioDownloads.has(request.url)) {
-            return cachedResponse;
+        if (cachedResponse || !range) return cachedResponse;
+        if (!audioDownloads.has(request.url)) {
+            if (new URL(request.url).origin !== self.location.origin) return null;
+            // Claimed before any await, so a second miss for the same file
+            // waits for this download instead of starting its own.
+            state.download = new Promise(resolve => (state.resolveDownload = resolve));
+            audioDownloads.set(request.url, state.download);
+            return null;
         }
         const download = await audioDownloads.get(request.url);
         return download ? download.respond(range) : null;
     },
     requestWillFetch: async ({ request, state }) => {
-        if (!request.headers.has('range')) return request;
-        state.download = new Promise(resolve => (state.resolveDownload = resolve));
-        audioDownloads.set(request.url, state.download);
+        if (!state.download) return request;
         const headers = new Headers(request.headers);
         headers.delete('range');
         return new Request(request, { headers });
@@ -101,6 +110,13 @@ const fullAudioDownloadPlugin = {
     },
 };
 
+// The page deleted the runtime caches ("Atnaujinti duomenis"). Downloads
+// still running would store into the deleted cache, so the next play must
+// start its own instead of joining them.
+self.addEventListener('message', event => {
+    if (event.data?.type === 'runtime-caches-cleared') audioDownloads.clear();
+});
+
 // Audio (mp3) – cache-first so hymns work offline.
 // The "Atnaujinti duomenis" flow deletes this cache to force fresh files.
 registerRoute(
@@ -110,7 +126,6 @@ registerRoute(
         cacheName: 'audio-v1',
         plugins: [
             otherCachedVersion('audio-v1'),
-            fullAudioDownloadPlugin,
             new CacheableResponsePlugin({ statuses: [0, 200] }),
             new RangeRequestsPlugin(),
             new ExpirationPlugin({
@@ -118,6 +133,7 @@ registerRoute(
                 maxAgeSeconds: 90 * 24 * 60 * 60,
                 purgeOnQuotaError: true,
             }),
+            fullAudioDownloadPlugin,
         ],
     }),
 );
