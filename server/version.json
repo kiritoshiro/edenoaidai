@@ -1,9 +1,9 @@
 {
-  "sha": "b10886f0f1c509a2f5aa091153d8378996f8e908",
-  "shortSha": "b10886f",
-  "branch": "dependabot/npm_and_yarn/frontend/vite-8.3.5",
-  "message": "Bump vite from 7.3.7 to 8.3.5 in /frontend",
-  "date": "2026-11-10T17:44:23Z",
+  "sha": "c5d4aba76f27811e342c1e14cbc0e96d2155063b",
+  "shortSha": "c5d4aba",
+  "branch": "fix/reload-on-stale-chunk",
+  "message": "Merge pull request #9 from kiritoshiro/dependabot/npm_and_yarn/frontend/vite-8.3.5",
+  "date": "2026-11-10T20:52:13+02:00",
   "dirty": true,
-  "builtAt": "2026-11-10T18:47:34.136Z"
+  "builtAt": "2026-11-12T11:17:14.644Z"
 }
