@@ -124,4 +124,24 @@ router.afterEach((to, from) => {
             : null;
 });
 
+// After a deploy, the new service worker takes over (skipWaiting +
+// clientsClaim) while this page may still run the previous build. That
+// build's lazy chunks (the admin pages) are gone from the server and from
+// the precache, so opening one fails and the page is stuck. Load the target
+// route again: the new service worker then serves the current build. The
+// time check stops a reload loop if a chunk is really missing.
+const STALE_CHUNK = /dynamically imported module|Importing a module script failed|Unable to preload CSS/i;
+const RELOAD_KEY = 'edeno:stale-chunk-reload';
+router.onError((error, to) => {
+    if (!STALE_CHUNK.test(String(error?.message ?? error))) return;
+    try {
+        const last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
+        if (Date.now() - last < 10_000) return;
+        sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    } catch {
+        // No sessionStorage: reload anyway; a loop needs the chunk to stay missing.
+    }
+    window.location.assign(to.fullPath);
+});
+
 export default router;
